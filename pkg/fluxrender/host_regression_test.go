@@ -115,12 +115,16 @@ func TestHostRandomHelmConvergesWithIndependentEvaluations(t *testing.T) {
 func TestPreviewDetectPermadiffsUsesRealFluxRandomHelm(t *testing.T) {
 	t.Parallel()
 	binary := filepath.Join(t.TempDir(), "gitops-preview-flux")
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-	defer cancel()
-	build := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", binary, "../../cmd/gitops-preview-flux")
+	// Cold CI caches can spend over a minute building the SDK-backed plugin.
+	// Keep build setup separate from the actual rendering deadline.
+	buildCtx, cancelBuild := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancelBuild()
+	build := exec.CommandContext(buildCtx, "go", "build", "-buildvcs=false", "-o", binary, "../../cmd/gitops-preview-flux")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build Flux executable: %v\n%s", err, output)
 	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
 	p, err := preview.New(
 		preview.WithPlugins([]plugin.Command{{Name: "flux", Command: binary}}),
 		preview.WithPaths([]string{"root"}, false),
