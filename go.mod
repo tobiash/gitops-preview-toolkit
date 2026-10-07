@@ -1,6 +1,6 @@
 module github.com/tobiash/gitops-preview-toolkit
 
-go 1.26.3
+go 1.26.8
 
 require (
 	github.com/containerd/errdefs v1.0.0
