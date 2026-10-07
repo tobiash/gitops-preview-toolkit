@@ -1,5 +1,5 @@
 {
-  "name": "flux-manifest-preview-action",
+  "name": "gitops-preview-toolkit-action",
   "private": true,
   "type": "module",
   "scripts": {

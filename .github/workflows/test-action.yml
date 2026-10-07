@@ -13,6 +13,12 @@ on:
       - "package.json"
       - "package-lock.json"
       - "tests/action/**"
+      - "cmd/**"
+      - "internal/cli/**"
+      - "pkg/**"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile.action"
 
 concurrency:
   group: action-integration-${{ github.event.pull_request.number || github.ref }}
@@ -41,10 +47,14 @@ jobs:
           # Modify a value in repo-b so the diff is non-empty
           sed -i 's/color: blue/color: green/' /tmp/repo-b/apps/podinfo/configmap.yaml
 
-      - name: Build fmp
-        run: go build -trimpath -ldflags="-s -w" -o /tmp/fmp ./cmd/fmp
+      - name: Build toolkit and compatibility binary
+        run: |
+          go build -trimpath -ldflags="-s -w" -o /tmp/ ./cmd/fmp ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
+          for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+            test -x "/tmp/$binary"
+          done
 
-      - name: Run flux-manifest-preview
+      - name: Run gitops-preview-toolkit with fmp compatibility binary
         id: fmp
         uses: ./
         with:
@@ -105,15 +115,24 @@ jobs:
           grep -q "fmp-report-data" "${{ steps.fmp.outputs.html-report-file }}" || { echo "Missing embedded report data"; exit 1; }
 
   test-cli:
-    name: Test fmp CLI commands
+    name: Test toolkit and fmp CLI commands
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Build fmp
-        run: go build -o /usr/local/bin/fmp ./cmd/fmp
+      - name: Build toolkit and compatibility binary
+        run: |
+          go build -o /usr/local/bin/ ./cmd/fmp ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
+          for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+            test -x "/usr/local/bin/$binary"
+          done
+      - name: Check toolkit compatibility
+        run: |
+          gitops-preview version
+          fmp version
+          gitops-preview test tests/action -k clusters/kube --render-helm=false -q
       - name: Run fmp test (should pass)
         run: fmp test tests/action -k clusters/kube --render-helm=false -q
       - name: Run fmp test (should fail on broken path)
@@ -137,3 +156,39 @@ jobs:
             exit 1
           fi
           echo "Sorted output is deterministic"
+
+  test-docker-action:
+    name: Test Docker action toolkit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare test repos and reports
+        run: |
+          mkdir -p "$RUNNER_TEMP/docker-action/reports"
+          cp -r tests/action "$RUNNER_TEMP/docker-action/repo-a"
+          cp -r tests/action "$RUNNER_TEMP/docker-action/repo-b"
+          sed -i 's/color: blue/color: green/' "$RUNNER_TEMP/docker-action/repo-b/apps/podinfo/configmap.yaml"
+      - name: Build Docker action
+        run: docker build -f Dockerfile.action -t gitops-preview-action:test .
+      - name: Verify bundled executables
+        run: |
+          docker run --rm --entrypoint /bin/sh gitops-preview-action:test -c '
+            for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+              test -x "/usr/local/bin/$binary" || exit 1
+            done'
+          docker run --rm --entrypoint /usr/local/bin/fmp gitops-preview-action:test version
+          docker run --rm --entrypoint /usr/local/bin/gitops-preview gitops-preview-action:test version
+      - name: Run Docker action with sibling plugins
+        run: |
+          docker run --rm \
+            -v "$RUNNER_TEMP/docker-action:/fixtures" \
+            -e INPUT_REPO_A=/fixtures/repo-a \
+            -e INPUT_REPO_B=/fixtures/repo-b \
+            -e INPUT_PATHS=clusters/kube \
+            -e INPUT_HELM=false \
+            -e RUNNER_TEMP=/fixtures/reports \
+            gitops-preview-action:test
+          test -f "$RUNNER_TEMP/docker-action/reports/fmp-report.json"
+          grep -q 'blue' "$RUNNER_TEMP/docker-action/reports/fmp-diff.txt"
+          grep -q 'green' "$RUNNER_TEMP/docker-action/reports/fmp-diff.txt"

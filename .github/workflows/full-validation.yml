@@ -48,8 +48,28 @@ jobs:
         run: go vet ./...
       - name: Run race tests
         run: go test -race ./...
+      - name: Run transport, host and renderer integration race tests
+        run: go test -race -tags=integration ./pkg/plugin ./pkg/pluginhost ./pkg/fluxrender ./pkg/crossplanerender -count=1 -timeout=5m
       - name: Cross-compile Linux arm64
-        run: GOOS=linux GOARCH=arm64 go build -o /dev/null ./cmd/fmp
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o "$RUNNER_TEMP/toolkit-arm64/" ./cmd/fmp ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
+          for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+            test -x "$RUNNER_TEMP/toolkit-arm64/$binary"
+          done
+
+  plugins-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Prepare isolated live-test workspace
+        run: mkdir -p /tmp/opencode
+      - name: Run real Crossplane function and plugin chain (no Docker)
+        run: bash tests/plugins/run-live.sh
 
   security:
     runs-on: ubuntu-24.04
@@ -83,4 +103,4 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: python3 scripts/check-vulnerabilities.py

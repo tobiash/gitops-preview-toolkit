@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package flux.preview.plugin.v1;
+
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/tobiash/gitops-preview-toolkit/api/plugin";
+
+// Every BytesValue contains UTF-8 JSON:
+// {"protocolVersion":1,"payload":{...}}
+// Payloads are the typed request/response structures in pkg/plugin/types.go:
+// DescribeRequest/DescribeResponse, OpenRequest/OpenResponse,
+// ExpandRequest/ExpandResponse, CloseRequest/CloseResponse, respectively.
+// The entire serialized protobuf message is limited to 64 MiB in both directions.
+// No automatic retries: session mutations may have completed on transport failure.
+// One private Unix socket connection persists across all calls and sessions.
+service RenderPlugin {
+  rpc Describe(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+  rpc OpenRender(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+  rpc Expand(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+  rpc CloseRender(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+}

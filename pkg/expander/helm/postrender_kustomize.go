@@ -23,6 +23,7 @@ import (
 
 	v2 "github.com/fluxcd/helm-controller/api/v2"
 	"github.com/fluxcd/pkg/apis/kustomize"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/resmap"
 	kustypes "sigs.k8s.io/kustomize/api/types"
@@ -30,7 +31,8 @@ import (
 )
 
 type postRendererKustomize struct {
-	spec *v2.Kustomize
+	spec      *v2.Kustomize
+	localOnly bool
 }
 
 func newPostRendererKustomize(spec *v2.Kustomize) *postRendererKustomize {
@@ -100,6 +102,11 @@ func (k *postRendererKustomize) Run(renderedManifests *bytes.Buffer) (modifiedMa
 	}
 	if err := writeOutput(fs, "kustomization.yaml", kustomization); err != nil {
 		return nil, err
+	}
+	if k.localOnly {
+		if err := render.ValidateLocalKustomization(fs, ".", "."); err != nil {
+			return nil, err
+		}
 	}
 	resMap, err := buildKustomization(fs, ".")
 	if err != nil {

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${APP_NAME}-values
+  namespace: apps
+data:
+  values.yaml: |
+    replicaCount: ${APP_REPLICAS}

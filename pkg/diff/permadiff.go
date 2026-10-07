@@ -1,19 +1,22 @@
 package diff
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/filter"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"gopkg.in/yaml.v3"
 	"sigs.k8s.io/kustomize/api/resource"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
 type FieldDiff struct {
+	LogicalID string
 	GVK       resid.Gvk
 	Name      string
 	Namespace string
@@ -157,7 +160,7 @@ func findDifferences(a, b map[string]any, prefix []string) []fieldDiffEntry {
 			continue
 		}
 
-		if fmt.Sprintf("%v", va) != fmt.Sprintf("%v", vb) {
+		if !equalFieldValues(va, vb) {
 			diffs = append(diffs, fieldDiffEntry{path: path, isLeaf: true})
 		}
 	}
@@ -198,12 +201,20 @@ func findArrayDifferences(a, b []any, prefix []string) []fieldDiffEntry {
 			continue
 		}
 
-		if fmt.Sprintf("%v", a[i]) != fmt.Sprintf("%v", b[i]) {
+		if !equalFieldValues(a[i], b[i]) {
 			diffs = append(diffs, fieldDiffEntry{path: idxPath, isLeaf: true})
 		}
 	}
 
 	return diffs
+}
+
+// Use the same canonical scalar semantics as inventory comparison. Display
+// strings collapse distinct YAML values such as !!str 1 and !!int 1.
+func equalFieldValues(a, b any) bool {
+	left, leftErr := json.Marshal(a)
+	right, rightErr := json.Marshal(b)
+	return leftErr == nil && rightErr == nil && bytes.Equal(left, right)
 }
 
 func isArrayIndex(s string) bool {

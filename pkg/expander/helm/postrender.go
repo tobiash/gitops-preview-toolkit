@@ -3,6 +3,7 @@ package helm
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	v2 "github.com/fluxcd/helm-controller/api/v2"
 )
@@ -22,6 +23,27 @@ type combinedPostRenderer struct {
 
 func newCombinedPostRenderer() combinedPostRenderer {
 	return combinedPostRenderer{renderers: make([]PostRenderer, 0)}
+}
+
+func localPostRenderer(renderer PostRenderer) (PostRenderer, error) {
+	switch r := renderer.(type) {
+	case nil, *postRendererOriginLabels, *postRendererCommonMetadata:
+		return renderer, nil
+	case *combinedPostRenderer:
+		combined := newCombinedPostRenderer()
+		for _, child := range r.renderers {
+			local, err := localPostRenderer(child)
+			if err != nil {
+				return nil, err
+			}
+			combined.addRenderer(local)
+		}
+		return &combined, nil
+	case *postRendererKustomize:
+		return &postRendererKustomize{spec: r.spec, localOnly: true}, nil
+	default:
+		return nil, fmt.Errorf("local-only: external Helm postrenderers are disabled")
+	}
 }
 
 func (c *combinedPostRenderer) addRenderer(renderer PostRenderer) {

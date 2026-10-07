@@ -1,0 +1,18 @@
+apiVersion: platform.example.org/v1alpha1
+kind: XPlatform
+metadata:
+  name: checkout
+  namespace: apps
+spec:
+  config:
+    environment: staging
+    image: nginx:1.27.4
+    replicas: 1
+    size: small
+    dbInstanceClass: db.t3.micro
+    storage: 20
+    cacheGiB: 1
+    expose: false
+    host: checkout.staging.example.test
+    logs: false
+    debug: false

@@ -17,6 +17,22 @@ func TestDiscoverConfigPath_FindsFMPYAML(t *testing.T) {
 	}
 }
 
+func TestDiscoverConfigPath_PrefersToolkitConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".fmp.yaml", "paths: [legacy]\n")
+	writeFile(t, dir, ".gitops-preview.yaml", "paths: [current]\ncrossplane:\n  enabled: true\n  timeout: 2m\n")
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Paths) != 1 || cfg.Paths[0] != "current" || filepath.Base(cfg.SourcePath) != ".gitops-preview.yaml" {
+		t.Fatalf("unexpected discovered config: %#v", cfg)
+	}
+	if cfg.Crossplane == nil || !BoolOr(cfg.Crossplane.Enabled, false) || cfg.Crossplane.Timeout != "2m" {
+		t.Fatalf("Crossplane preferences missing: %#v", cfg.Crossplane)
+	}
+}
+
 func TestDiscoverConfigPath_FindsFMPYML(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, ".fmp.yml", "sort: true\n")

@@ -1,13 +1,77 @@
 package ai
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
+
+func TestPayloadDistinguishesRedactedLogicalSecrets(t *testing.T) {
+	result := &diff.DiffResult{}
+	for _, id := range []string{"xr/parent/a", "xr/parent/b"} {
+		result.Added = append(result.Added, diff.ResourceChange{
+			Action: "added", Kind: "Secret", Namespace: "apps", Producer: "XR apps/parent", LogicalID: id,
+			New: map[string]any{"data": map[string]any{"password": "sensitive-value"}},
+		})
+	}
+	text, truncated, err := buildInputPayload(Request{Result: result}, inputLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || strings.Contains(text, "sensitive-value") {
+		t.Fatalf("unexpected payload truncation or secret leak: %s", text)
+	}
+	var input payload
+	if err := json.Unmarshal([]byte(text), &input); err != nil {
+		t.Fatal(err)
+	}
+	if len(input.Changes) != 2 || input.Changes[0].LogicalID == input.Changes[1].LogicalID {
+		t.Fatalf("redacted slots indistinguishable: %s", text)
+	}
+	for i, id := range []string{"xr/parent/a", "xr/parent/b"} {
+		change := input.Changes[i]
+		if change.LogicalID != id || change.Name != "" || change.UnifiedDiff != "[redacted secret diff]" {
+			t.Fatalf("incorrect logical secret projection: %+v", change)
+		}
+	}
+}
+
+func TestAssessmentLogicalAttribution(t *testing.T) {
+	assessment, err := decodeAssessment(`{"classifications":[{"id":"review","logicalId":"xr/parent/a"},{"id":"review","logicalId":"xr/parent/b"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _ := filterClassifications(assessment.Classifications, []string{"review"}, nil)
+	if len(items) != 2 || items[0].LogicalID != "xr/parent/a" || items[1].LogicalID != "xr/parent/b" {
+		t.Fatalf("assessment lost logical attribution: %+v", items)
+	}
+	if !strings.Contains(systemPrompt(&config.AIConfig{}, false), `"logicalId":"optional"`) {
+		t.Fatal("assessment schema omits logical attribution")
+	}
+	encoded, err := json.Marshal(assessment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"logicalId":"xr/parent/a"`) {
+		t.Fatalf("assessment JSON lost logical identity: %s", encoded)
+	}
+}
+
+func TestNamedAIPayloadOmitsLogicalID(t *testing.T) {
+	text, _, err := buildInputPayload(Request{Result: &diff.DiffResult{
+		Added: []diff.ResourceChange{{Action: "added", Kind: "Secret", Name: "credentials"}},
+	}}, inputLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, "logicalId") || !strings.Contains(text, `"name":"credentials"`) {
+		t.Fatalf("named AI input compatibility changed: %s", text)
+	}
+}
 
 func TestBoundedResourceDiffRedactsSecretResources(t *testing.T) {
 	got, truncated := boundedResourceDiff(diff.ResourceChange{Kind: "Secret"}, 80)

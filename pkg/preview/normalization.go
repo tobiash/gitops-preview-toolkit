@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
 )
 
 type normalizationDiscovery struct {
@@ -31,21 +31,17 @@ func (d NormalizationDiagnosis) FieldDiffs() []diff.FieldDiff {
 }
 
 func (d normalizationDiscovery) WritePermadiffConfig(ctx context.Context, out io.Writer) error {
-	left, right, err := d.renderTwice(ctx)
+	diagnosis, err := d.Diagnose(ctx)
 	if err != nil {
 		return err
 	}
 
-	clusters := sortedClusterNames(left)
-	for _, cluster := range clusters {
-		if err := diff.WritePermadiffConfig(left[cluster].render, right[cluster].render, out); err != nil {
-			if d.preview.isClustered() {
-				return fmt.Errorf("cluster %q: %w", cluster, err)
-			}
-			return err
-		}
+	config, err := diff.GenerateFilterConfig(diagnosis.FieldDiffs())
+	if err != nil {
+		return err
 	}
-	return nil
+	_, err = out.Write(config)
+	return err
 }
 
 func (d normalizationDiscovery) Detect(ctx context.Context) ([]diff.FieldDiff, error) {
@@ -72,6 +68,11 @@ func (d normalizationDiscovery) Diagnose(ctx context.Context) (*NormalizationDia
 			}
 			return nil, fmt.Errorf("detecting permadiffs: %w", err)
 		}
+		logicalDiffs, err := diff.DetectLogicalPermadiffs(left[cluster].logical, right[cluster].logical)
+		if err != nil {
+			return nil, fmt.Errorf("cluster %q: detecting logical permadiffs: %w", cluster, err)
+		}
+		diffs = append(diffs, logicalDiffs...)
 		for _, fieldDiff := range diffs {
 			diagnosis.Findings = append(diagnosis.Findings, NormalizationFinding{
 				Cluster: cluster,
@@ -83,6 +84,7 @@ func (d normalizationDiscovery) Diagnose(ctx context.Context) (*NormalizationDia
 }
 
 func (d normalizationDiscovery) renderTwice(ctx context.Context) (map[string]*loadRepoResult, map[string]*loadRepoResult, error) {
+	defer d.preview.beginRun()()
 	left, err := d.preview.freshLoadRepo(ctx, d.path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error loading repo (first pass): %w", err)
@@ -91,6 +93,13 @@ func (d normalizationDiscovery) renderTwice(ctx context.Context) (map[string]*lo
 	right, err := d.preview.freshLoadRepo(ctx, d.path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error loading repo (second pass): %w", err)
+	}
+	for _, results := range []map[string]*loadRepoResult{left, right} {
+		for _, result := range results {
+			if len(result.errors) != 0 {
+				return nil, nil, &ExpansionError{Errors: result.errors, Warnings: result.warnings}
+			}
+		}
 	}
 
 	return left, right, nil

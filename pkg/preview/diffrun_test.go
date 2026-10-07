@@ -9,11 +9,10 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/ai"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
-	helmcli "helm.sh/helm/v4/pkg/cli"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/ai"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 )
 
 func TestRunDiffLocalHelmChartStructuredOrigins(t *testing.T) {
@@ -45,11 +44,11 @@ spec:
 		writePreviewFile(t, dir, "chart/Chart.yaml", "apiVersion: v2\nname: local\nversion: 0.1.0\n")
 		writePreviewFile(t, dir, "chart/templates/cm.yaml", fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .Release.Name }}\n  namespace: {{ .Release.Namespace }}\ndata:\n  value: %q\n", fmt.Sprint(i)))
 	}
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS(), WithGitRepo(), WithHelm(helmcli.New()))
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS(), WithGitRepo(), WithHelm(&config.HelmSettings{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(p.gitRepoExpander.Cleanup)
+	t.Cleanup(func() { _ = p.Close() })
 	run, err := p.RunDiff(context.Background(), DiffRunOptions{LeftPath: left, RightPath: right})
 	if err != nil {
 		t.Fatal(err)
@@ -101,10 +100,10 @@ data:
   key: value
 `)
 
-	p, err := New(
+	p, err := newTestPreview(t,
 		WithLogger(logr.Discard()),
 		WithPaths([]string{"."}, false),
-		WithHelm(helmcli.New()),
+		WithHelm(&config.HelmSettings{}),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -145,7 +144,7 @@ func (a *warningAssessor) Assess(context.Context, ai.Request) (*ai.Assessment, e
 func TestRunDiffWarningsDoNotImplyIncomplete(t *testing.T) {
 	left, right := t.TempDir(), t.TempDir()
 	writePreviewFile(t, right, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: added\n")
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +163,7 @@ func TestDuplicateResourcesMakePreviewIncomplete(t *testing.T) {
 	manifest := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: duplicate\n"
 	writePreviewFile(t, dir, "a.yaml", manifest)
 	writePreviewFile(t, dir, "b.yaml", manifest)
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
 	if err != nil {
 		t.Fatal(err)
 	}

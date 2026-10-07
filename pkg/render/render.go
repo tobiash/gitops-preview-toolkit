@@ -3,16 +3,13 @@ package render
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/go-logr/logr"
-	"sigs.k8s.io/kustomize/api/krusty"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/resource"
-	"sigs.k8s.io/kustomize/kyaml/filesys"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
@@ -72,7 +69,6 @@ func MatchGVK(resGvk, target resid.Gvk) bool {
 // Render holds a set of rendered Kubernetes YAML resources.
 type Render struct {
 	resmap.ResMap
-	kustomizer *krusty.Kustomizer
 	log        logr.Logger
 	warnings   []error
 	provenance map[string]Provenance
@@ -90,79 +86,13 @@ type ResourceView struct {
 	YAML       string
 }
 
-// NewDefaultRender creates a Render with default kustomize options.
+// NewDefaultRender creates a passive collection of rendered resources.
 func NewDefaultRender(log logr.Logger) *Render {
 	return &Render{
 		ResMap:     resmap.New(),
-		kustomizer: krusty.MakeKustomizer(krusty.MakeDefaultOptions()),
 		log:        log,
 		provenance: make(map[string]Provenance),
 	}
-}
-
-// AddKustomization runs kustomize on the given path and appends the results.
-func (r *Render) AddKustomization(fSys filesys.FileSystem, path string) error {
-	return r.AddKustomizationWithProducer(fSys, path, PathProvenance(path).String())
-}
-
-// AddKustomizationWithProducer runs kustomize on the given path and records the producer.
-func (r *Render) AddKustomizationWithProducer(fSys filesys.FileSystem, path, producer string) error {
-	resmap, err := r.kustomizer.Run(fSys, path)
-	if err != nil {
-		return err
-	}
-	return r.absorbResMap(path, producer, resmap)
-}
-
-// AddPath loads resources from a directory path. If the directory contains a
-// kustomization file (kustomization.yaml, kustomization.yml, or Kustomization),
-// it is processed as a kustomize base. Otherwise all .yaml/.yml files in the
-// directory are loaded as raw Kubernetes manifests.
-func (r *Render) AddPath(fSys filesys.FileSystem, path string) error {
-	return r.AddPathWithProducer(fSys, path, PathProvenance(path).String())
-}
-
-// AddPathWithProducer loads resources from a path and records the producer.
-func (r *Render) AddPathWithProducer(fSys filesys.FileSystem, path, producer string) error {
-	if isKustomization(fSys, path) {
-		return r.AddKustomizationWithProducer(fSys, path, producer)
-	}
-	return r.addRawYAMLFiles(fSys, path, producer)
-}
-
-func (r *Render) addRawYAMLFiles(fSys filesys.FileSystem, dir, producer string) error {
-	entries, err := fSys.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("reading directory %s: %w", dir, err)
-	}
-
-	for _, name := range entries {
-		// These are fmp configuration files, not Kubernetes manifests.
-		if name == ".fmp.yaml" || name == ".fmp.yml" || (filepath.Base(dir) == ".github" && name == "fmp.yaml") {
-			continue
-		}
-		ext := filepath.Ext(name)
-		if ext != ".yaml" && ext != ".yml" {
-			continue
-		}
-
-		fullPath := filepath.Join(dir, name)
-		data, err := fSys.ReadFile(fullPath)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", fullPath, err)
-		}
-
-		resources, err := resmap.NewFactory(resource.NewFactory(nil)).NewResMapFromBytes(data)
-		if err != nil {
-			return fmt.Errorf("parsing %s: %w", fullPath, err)
-		}
-
-		if err := r.absorbResMap(fullPath, producer, resources); err != nil {
-			return fmt.Errorf("appending resources from %s: %w", fullPath, err)
-		}
-	}
-
-	return nil
 }
 
 func (r *Render) absorbResMap(source, producer string, src resmap.ResMap) error {
@@ -203,52 +133,6 @@ func (r *Render) AbsorbAll(src resmap.ResMap) error {
 		r.warnings = append(r.warnings, rendered.Warnings()...)
 	}
 	return r.absorbResMap("expanded resources", "expanded resources", src)
-}
-
-// AddPaths recursively loads resources from a directory and all subdirectories.
-// Each subdirectory is processed independently -- directories with a
-// kustomization file are processed as kustomize bases; directories without one
-// have their .yaml/.yml files loaded as raw manifests.
-// When a directory is processed as a kustomize base, its subdirectories are
-// not recursed into because kustomize already handles resource loading.
-func (r *Render) AddPaths(fSys filesys.FileSystem, root string) error {
-	return r.AddPathsWithProducer(fSys, root, PathProvenance(root).String())
-}
-
-// AddPathsWithProducer recursively loads resources from a directory and records the producer.
-func (r *Render) AddPathsWithProducer(fSys filesys.FileSystem, root, producer string) error {
-	return WalkPaths(fSys, root, func(path string) error {
-		return r.AddPathWithProducer(fSys, path, producer)
-	})
-}
-
-// WalkPaths visits independent build directories, stopping below Kustomize bases.
-func WalkPaths(fSys filesys.FileSystem, root string, visit func(string) error) error {
-	if err := visit(root); err != nil {
-		return err
-	}
-
-	// Only recurse into subdirectories if this was not a kustomize base.
-	// Kustomize already loads referenced resources from subdirectories.
-	if isKustomization(fSys, root) {
-		return nil
-	}
-
-	entries, err := fSys.ReadDir(root)
-	if err != nil {
-		return fmt.Errorf("reading directory %s: %w", root, err)
-	}
-
-	for _, name := range entries {
-		sub := filepath.Join(root, name)
-		if fSys.IsDir(sub) {
-			if err := WalkPaths(fSys, sub, visit); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 // MarkProvenanceToNew records producer metadata for resources added after count.
@@ -314,6 +198,20 @@ func (r *Render) ProvenanceForID(id resid.ResId) Provenance {
 	return r.provenance[id.String()]
 }
 
+// SetProvenance stores exact structured origin metadata without modifying YAML.
+func (r *Render) SetProvenance(id resid.ResId, p Provenance) {
+	if r.provenance == nil {
+		r.provenance = make(map[string]Provenance)
+	}
+	r.provenance[id.String()] = p
+}
+
+// AbsorbWithProducer merges already-built resources with source context for
+// duplicate diagnostics. It performs no filesystem reads or rendering.
+func (r *Render) AbsorbWithProducer(source, producer string, src resmap.ResMap) error {
+	return r.absorbResMap(source, producer, src)
+}
+
 // ResourceViewForID returns a rendered resource and its fmp metadata.
 func (r *Render) ResourceViewForID(id resid.ResId) (ResourceView, bool) {
 	res, _ := r.GetByCurrentId(id)
@@ -370,16 +268,6 @@ func provenanceForResource(res *resource.Resource, fallback Provenance) Provenan
 		return TextProvenance(producer)
 	}
 	return fallback
-}
-
-// isKustomization checks whether a directory contains a kustomization file.
-func isKustomization(fSys filesys.FileSystem, path string) bool {
-	for _, name := range []string{"kustomization.yaml", "kustomization.yml", "Kustomization"} {
-		if fSys.Exists(filepath.Join(path, name)) {
-			return true
-		}
-	}
-	return false
 }
 
 // Sort orders resources by (kind, namespace, name) for deterministic output.
@@ -459,6 +347,9 @@ func (r *Render) ApplyNamespaceToNew(count int, namespace string) error {
 		}
 		if err := r.absorbResMap("targetNamespace", producers[i].String(), one); err != nil {
 			return err
+		}
+		if producers[i] != (Provenance{}) {
+			r.SetProvenance(res.CurId(), producers[i])
 		}
 	}
 	return nil

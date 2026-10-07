@@ -48,6 +48,13 @@ stitch-designs/
 
 # Binary built in repo root
 /fmp
+/gitops-preview
+/gitops-preview-flux
+/gitops-preview-crossplane
+/.goreleaser-dist/
+
+# Python test bytecode
+__pycache__/
 
 # Node dependencies
 /node_modules

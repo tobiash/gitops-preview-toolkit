@@ -3,11 +3,12 @@ package preview
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/filter"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
@@ -16,7 +17,7 @@ func TestClusteredRenderJSONPreservesExpansionWarnings(t *testing.T) {
 	manifest := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: duplicate\n"
 	writePreviewFile(t, dir, "a.yaml", manifest)
 	writePreviewFile(t, dir, "b.yaml", manifest)
-	p, err := New(WithLogger(logr.Discard()), WithClusterPaths(map[string][]string{"test": {"."}}))
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithClusterPaths(map[string][]string{"test": {"."}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,8 +30,16 @@ func TestClusteredRenderJSONPreservesExpansionWarnings(t *testing.T) {
 	p.filters = &filter.FilterConfig{Filters: []filter.KFilter{{Filter: invalidJSONMapFilter{}}}}
 	out.Reset()
 	err = p.RenderJSON(context.Background(), dir, &out)
-	if !errors.As(err, &expansionErr) || len(expansionErr.Errors) < 2 || len(expansionErr.Warnings) == 0 || out.Len() != 0 {
-		t.Fatalf("RenderJSON(duplicate and invalid map) error=%#v, output=%s; want both errors, warnings, and no output", err, &out)
+	if !errors.As(err, &expansionErr) || len(expansionErr.Errors) == 0 || len(expansionErr.Warnings) == 0 {
+		t.Fatalf("RenderJSON(duplicate and invalid map) error=%#v, output=%s; want errors and warnings", err, &out)
+	}
+	// The host suppresses an incomplete plugin inventory before output filters.
+	// The separate invalid-map tests below exercise filter failures on complete input.
+	var list struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &list); err != nil || len(list.Items) != 0 {
+		t.Fatalf("incomplete plugin output = %s, decode error=%v; want an empty inventory", &out, err)
 	}
 }
 
@@ -55,7 +64,7 @@ func TestRenderJSONRejectsInvalidResourceMap(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			writePreviewFile(t, dir, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: broken\n")
-			p, err := New(WithLogger(logr.Discard()), paths,
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), paths,
 				WithFilterConfig(&filter.FilterConfig{Filters: []filter.KFilter{{Filter: invalidJSONMapFilter{}}}}))
 			if err != nil {
 				t.Fatal(err)

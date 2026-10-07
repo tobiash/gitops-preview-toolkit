@@ -8,8 +8,8 @@ import (
 
 	fluxksv1 "github.com/fluxcd/kustomize-controller/api/v1"
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/kustomize/api/resource"
 	"sigs.k8s.io/kustomize/kyaml/resid"
@@ -26,8 +26,9 @@ type SourceResolver interface {
 // their spec.path values as DiscoveredPaths for the next iteration of the
 // expansion loop.
 type Expander struct {
-	log      logr.Logger
-	resolver SourceResolver
+	log          logr.Logger
+	resolver     SourceResolver
+	strictInputs bool
 }
 
 // NewExpander creates a Flux Kustomization expander.
@@ -40,12 +41,21 @@ func NewExpanderWithResolver(log logr.Logger, resolver SourceResolver) *Expander
 	return &Expander{log: log, resolver: resolver}
 }
 
-func (e *Expander) Expand(_ context.Context, r *render.Render) (*expander.ExpandResult, error) {
+// SetStrictInputs rejects known rendering inputs not implemented by the expander.
+// It does not change source resolution or filesystem access.
+func (e *Expander) SetStrictInputs() {
+	e.strictInputs = true
+}
+
+func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.ExpandResult, error) {
 	var paths []expander.DiscoveredPath
 	var errs []error
 	var deferredErrors []error
 
 	for _, res := range r.Resources() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		gvk := res.GetGvk()
 		if !render.MatchGVK(gvk, fluxKSGVK) {
 			continue
@@ -55,6 +65,12 @@ func (e *Expander) Expand(_ context.Context, r *render.Render) (*expander.Expand
 		if err != nil {
 			errs = append(errs, err)
 			continue
+		}
+		if e.strictInputs {
+			if err := unsupportedInputs(ks); err != nil {
+				errs = append(errs, err)
+				continue
+			}
 		}
 		path := ks.Spec.Path
 		path = strings.TrimPrefix(path, "./")
@@ -98,6 +114,27 @@ func (e *Expander) Expand(_ context.Context, r *render.Render) (*expander.Expand
 	}
 
 	return &expander.ExpandResult{DiscoveredPaths: paths, Errors: errs, DeferredErrors: deferredErrors}, nil
+}
+
+func unsupportedInputs(ks *fluxksv1.Kustomization) error {
+	for _, input := range []struct {
+		field string
+		used  bool
+	}{
+		{"postBuild.substituteFrom", ks.Spec.PostBuild != nil && len(ks.Spec.PostBuild.SubstituteFrom) > 0},
+		{"patches", len(ks.Spec.Patches) > 0},
+		{"images", len(ks.Spec.Images) > 0},
+		{"components", len(ks.Spec.Components) > 0},
+		{"namePrefix", ks.Spec.NamePrefix != ""},
+		{"nameSuffix", ks.Spec.NameSuffix != ""},
+		{"commonMetadata", ks.Spec.CommonMetadata != nil},
+		{"decryption", ks.Spec.Decryption != nil},
+	} {
+		if input.used {
+			return fmt.Errorf("strict inputs: Kustomization %s/%s spec.%s is unsupported", ks.Namespace, ks.Name, input.field)
+		}
+	}
+	return nil
 }
 
 func decodeKustomization(res *resource.Resource) (*fluxksv1.Kustomization, error) {

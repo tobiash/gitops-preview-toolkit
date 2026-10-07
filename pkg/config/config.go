@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/filter"
 	"gopkg.in/yaml.v3"
 )
 
 var searchPaths = []string{
+	".gitops-preview.yaml",
+	".gitops-preview.yml",
 	".fmp.yaml",
 	".fmp.yml",
 	".github/fmp.yaml",
@@ -27,6 +29,7 @@ type Config struct {
 	ExcludeCRDs  *bool                    `yaml:"exclude-crds,omitempty"`
 	Filters      filter.FilterConfig      `yaml:",inline"`
 	HelmSettings *HelmSettings            `yaml:"helm-settings,omitempty"`
+	Crossplane   *CrossplaneSettings      `yaml:"crossplane,omitempty"`
 	Policies     *PolicyConfig            `yaml:"policies,omitempty"`
 	AI           *AIConfig                `yaml:"ai,omitempty"`
 	SourcePath   string                   `yaml:"-"`
@@ -55,9 +58,17 @@ func (c *ClusterConfig) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type HelmSettings struct {
-	RegistryConfig   string `yaml:"registry-config,omitempty"`
-	RepositoryConfig string `yaml:"repository-config,omitempty"`
-	RepositoryCache  string `yaml:"repository-cache,omitempty"`
+	RegistryConfig   string `yaml:"registry-config,omitempty" json:"registryConfig,omitempty"`
+	RepositoryConfig string `yaml:"repository-config,omitempty" json:"repositoryConfig,omitempty"`
+	RepositoryCache  string `yaml:"repository-cache,omitempty" json:"repositoryCache,omitempty"`
+}
+
+// CrossplaneSettings contains repository preferences, never execution grants.
+// Executables and development endpoints must come from trusted CLI invocation.
+type CrossplaneSettings struct {
+	Enabled      *bool  `yaml:"enabled,omitempty"`
+	Timeout      string `yaml:"timeout,omitempty"`
+	MaxFunctions int    `yaml:"max-functions,omitempty"`
 }
 
 type PolicyConfig struct {

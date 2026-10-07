@@ -1,12 +1,85 @@
 package githubaction
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
-	fmpdiff "github.com/tobiash/flux-manifest-preview/pkg/diff"
+	fmpdiff "github.com/tobiash/gitops-preview-toolkit/pkg/diff"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 )
+
+func TestHTMLReportLogicalSlots(t *testing.T) {
+	result := &fmpdiff.DiffResult{}
+	for _, slot := range []string{"second", "first"} {
+		result.Added = append(result.Added, fmpdiff.ResourceChange{
+			LogicalID: "xr/parent/" + slot,
+			ID:        resid.NewResIdWithNamespace(resid.Gvk{Version: "v1", Kind: "Secret"}, "", "apps"),
+			Kind:      "Secret", Namespace: "apps", Producer: "XR apps/parent", Action: "added",
+			New: map[string]any{"metadata": map[string]any{"annotations": map[string]any{
+				"crossplane.io/composition-resource-name": slot,
+			}}},
+		})
+	}
+	data := BuildHTMLReportData(&Request{}, BuildReport(ReportInput{Result: result}), result)
+	if len(data.Resources) != 2 || data.Resources[0].ID == data.Resources[1].ID {
+		t.Fatalf("logical slots collapsed: %+v", data.Resources)
+	}
+	for i, slot := range []string{"first", "second"} {
+		resource := data.Resources[i]
+		if resource.Index != i || resource.Name != "" || resource.Slot != slot || resource.LogicalID != "xr/parent/"+slot {
+			t.Fatalf("incorrect slot projection: %+v", resource)
+		}
+	}
+	encoded, err := reportDataJSON(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded HTMLReportData
+	if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Resources[0].LogicalID != data.Resources[0].LogicalID {
+		t.Fatalf("JSON lost logical identity: %+v", decoded.Resources)
+	}
+	html, err := RenderHTMLReport(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js, err := reportUI.ReadFile("reportui/report.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, string(js)) || !strings.Contains(html, `"slot":"first"`) {
+		t.Fatal("rendered report does not include runtime JS and logical slot data")
+	}
+}
+
+func TestHTMLReportSlotFallbackAndNamedCompatibility(t *testing.T) {
+	change := fmpdiff.ResourceChange{
+		LogicalID: "xr/parent/output", Kind: "Secret", Action: "deleted",
+		Old: map[string]any{"metadata": map[string]any{"annotations": map[string]any{
+			"crossplane.io/composition-resource-name": "old-slot",
+		}}},
+	}
+	if got := htmlResourceChanges([]fmpdiff.ResourceChange{change}, 0)[0]; got.Slot != "old-slot" || got.Name != "" {
+		t.Fatalf("deleted slot fallback = %+v", got)
+	}
+	change.LogicalID = ""
+	change.Name = "named-secret"
+	change.ID = resid.NewResId(resid.Gvk{Version: "v1", Kind: "Secret"}, change.Name)
+	got := htmlResourceChanges([]fmpdiff.ResourceChange{change}, 0)[0]
+	if got.ID != "||v1|Secret||named-secret" || got.Slot != "" || got.Name != change.Name {
+		t.Fatalf("named report changed: %+v", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "logicalId") || strings.Contains(string(encoded), `"slot"`) {
+		t.Fatalf("named report gained empty properties: %s", encoded)
+	}
+}
 
 func TestParseUnifiedDiffRows(t *testing.T) {
 	rows := parseUnifiedDiffRows("--- a\n+++ b\n@@ -2,2 +2,3 @@\n keep\n-old\n+new\n+next")
@@ -93,7 +166,7 @@ func TestRenderHTMLReportEscapesScriptTerminators(t *testing.T) {
 	if strings.Contains(html, "</script><script>alert") {
 		t.Fatalf("script terminator was not escaped: %s", html)
 	}
-	if !strings.Contains(html, "Flux Manifest Preview Report") {
+	if !strings.Contains(html, "gitops-preview-toolkit Report") {
 		t.Fatal("missing report title")
 	}
 }

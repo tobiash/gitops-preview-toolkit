@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 func TestStatusFromCounts(t *testing.T) {

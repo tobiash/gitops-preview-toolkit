@@ -48,3 +48,35 @@ jobs:
         run: go vet ./...
       - name: Run tests
         run: go test ./...
+      - name: Build toolkit and compatibility binary
+        run: |
+          go build -o "$RUNNER_TEMP/toolkit/" ./cmd/fmp ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
+          for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+            test -x "$RUNNER_TEMP/toolkit/$binary"
+          done
+
+  plugin-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run transport, host and renderer integration race tests
+        run: go test -race -tags=integration ./pkg/plugin ./pkg/pluginhost ./pkg/fluxrender ./pkg/crossplanerender -count=1 -timeout=5m
+
+  plugins-live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+      - name: Prepare isolated live-test workspace
+        run: mkdir -p /tmp/opencode
+      - name: Run real Crossplane function and plugin chain (no Docker)
+        run: bash tests/plugins/run-live.sh

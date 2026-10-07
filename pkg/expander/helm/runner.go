@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
-	fmprender "github.com/tobiash/flux-manifest-preview/pkg/render"
+	fmprender "github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"helm.sh/helm/v4/pkg/action"
 	chartcommon "helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
@@ -22,14 +23,16 @@ import (
 	"sigs.k8s.io/kustomize/api/hasher"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/resource"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Runner handles Helm chart downloading and rendering.
 type Runner struct {
-	settings *helmcli.EnvSettings
-	logger   logr.Logger
+	settings  *helmcli.EnvSettings
+	logger    logr.Logger
+	localRoot string
 }
 
 type RenderTask struct {
@@ -38,6 +41,7 @@ type RenderTask struct {
 	version         string
 	repo            repo.Entry
 	localChartPath  string
+	localSourceRoot string
 	releaseName     string
 	namespace       string
 	origin          fmprender.Provenance
@@ -48,6 +52,11 @@ type RenderTask struct {
 	includeCRDs     bool
 	isOCI           bool
 	postRenderer    PostRenderer
+}
+
+// SetLocalOnly requires existing local charts confined to root, with no acquisition.
+func (r *Runner) SetLocalOnly(root string) {
+	r.localRoot = root
 }
 
 // NewRunner creates a new Helm runner.
@@ -71,17 +80,29 @@ func (r *Runner) RenderCharts(ctx context.Context, releases []RenderTask) (resma
 	results := make([]result, len(releases))
 
 	var wg sync.WaitGroup
+	// Bound active Helm work as well as the number of worker goroutines.
+	workers := make(chan struct{}, 4)
 	for i, h := range releases {
+		select {
+		case workers <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return nil, nil, ctx.Err()
+		}
 		i := i
 		h := h
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { <-workers }()
 			chartRes, err := r.renderChart(ctx, &h)
 			results[i] = result{resources: chartRes, err: err, task: h}
 		}()
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 
 	var errs []error
 	for _, chartResult := range results {
@@ -129,8 +150,46 @@ func helmReleaseProducer(task RenderTask) string {
 }
 
 func (r *Runner) renderChart(ctx context.Context, t *RenderTask) (resmap.ResMap, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if r.localRoot != "" {
+		if t.localChartPath == "" || t.isOCI || t.repo.URL != "" {
+			return nil, fmt.Errorf("local-only: Helm requires an existing local chart; repository and OCI acquisition are disabled")
+		}
+		fs := filesys.MakeFsOnDisk()
+		root := t.localSourceRoot
+		if root == "" {
+			root = r.localRoot
+		}
+		if err := fmprender.ValidateLocalPath(fs, r.localRoot, root); err != nil {
+			return nil, err
+		}
+		if err := fmprender.ValidateLocalPath(fs, root, t.localChartPath); err != nil {
+			return nil, err
+		}
+		if err := filepath.Walk(t.localChartPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if !info.IsDir() && !info.Mode().IsRegular() {
+				return fmt.Errorf("local-only: chart symlinks and special files are unsupported: %s", path)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
 	cfg := new(action.Configuration)
-	if err := cfg.Init(r.settings.RESTClientGetter(), t.namespace, os.Getenv("HELM_DRIVER")); err != nil {
+	driver := os.Getenv("HELM_DRIVER")
+	if r.localRoot != "" {
+		// In particular, never initialize the SQL driver from process environment.
+		driver = "memory"
+	}
+	if err := cfg.Init(r.settings.RESTClientGetter(), t.namespace, driver); err != nil {
 		return nil, fmt.Errorf("initializing helm configuration: %w", err)
 	}
 
@@ -154,6 +213,11 @@ func (r *Runner) renderChart(ctx context.Context, t *RenderTask) (resmap.ResMap,
 			return nil, fmt.Errorf("loading local chart %s: %w", t.localChartPath, err)
 		}
 		ch = loaded
+		if r.localRoot != "" {
+			if err := validateLocalChart(ch); err != nil {
+				return nil, err
+			}
+		}
 		r.logger.V(1).Info("loaded local chart", "chart", t.chart, "path", t.localChartPath)
 	} else if t.isOCI {
 		// For OCI charts, construct the full reference, skip repo index, and set up a registry client.
@@ -210,7 +274,17 @@ func (r *Runner) renderChart(ctx context.Context, t *RenderTask) (resmap.ResMap,
 			}
 		}
 	}
-	renderedManifests, err := runPostRenderer(t.postRenderer, &manifests)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	postRenderer := t.postRenderer
+	if r.localRoot != "" {
+		postRenderer, err = localPostRenderer(postRenderer)
+		if err != nil {
+			return nil, err
+		}
+	}
+	renderedManifests, err := runPostRenderer(postRenderer, &manifests)
 	if err != nil {
 		return nil, fmt.Errorf("running post renderer: %w", err)
 	}

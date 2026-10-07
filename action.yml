@@ -1,9 +1,9 @@
-name: 'Flux Manifest Preview'
-description: 'Render and diff Flux GitOps manifests with structured outputs and optional PR comments'
+name: 'gitops-preview-toolkit'
+description: 'Render and diff GitOps manifests through Flux and optional Crossplane plugins with reports and PR comments'
 
 inputs:
   binary:
-    description: 'Path to an existing fmp executable for local or non-release testing'
+    description: 'Path to an existing gitops-preview or fmp executable; install sibling render plugins for local or non-release testing'
     required: false
     default: ''
   repo:
@@ -38,6 +38,26 @@ inputs:
     description: 'Clone and follow external GitRepository sources'
     required: false
     default: 'false'
+  crossplane:
+    description: 'Trusted opt-in to Crossplane rendering and composition function execution (Docker by default)'
+    required: false
+    default: 'false'
+  crossplane-engine:
+    description: 'Trusted path to the external Crossplane v2.4.2 engine (default: crossplane-core on PATH)'
+    required: false
+    default: ''
+  crossplane-function:
+    description: 'Trusted development targets, newline-separated function=host:port entries'
+    required: false
+    default: ''
+  flux-plugin:
+    description: 'Trusted Flux plugin executable override'
+    required: false
+    default: ''
+  crossplane-plugin:
+    description: 'Trusted Crossplane plugin executable override (requires crossplane: true)'
+    required: false
+    default: ''
   sort:
     description: 'Sort output for deterministic diffs'
     required: false
@@ -51,7 +71,7 @@ inputs:
     required: false
     default: ''
   config:
-    description: 'Path to an explicit .fmp.yaml config file (overrides auto-discovery)'
+    description: 'Explicit config path (auto-discovers .gitops-preview.yaml, with .fmp.yaml compatibility)'
     required: false
     default: ''
   filter-file:
@@ -131,7 +151,7 @@ inputs:
     required: false
     default: 'fmp-reports'
   ai-assessment:
-    description: 'Enable optional AI assessment; empty inherits .fmp.yaml ai.enabled'
+    description: 'Enable optional AI assessment; empty inherits repository ai.enabled'
     required: false
     default: ''
   ai-provider:
@@ -143,7 +163,7 @@ inputs:
     required: false
     default: ''
   ai-fail-on-error:
-    description: 'Fail when AI assessment cannot be generated; empty inherits .fmp.yaml ai.fail-on-error'
+    description: 'Fail when AI assessment cannot be generated; empty inherits repository ai.fail-on-error'
     required: false
     default: ''
   fail-on-warning:

@@ -1,0 +1,3614 @@
+{
+  "added": [
+    {
+      "apiVersion": "s3.aws.m.upbound.io/v1beta1",
+      "kind": "Bucket",
+      "metadata": {
+        "annotations": {
+          "crossplane.io/composition-resource-name": "logs"
+        },
+        "labels": {
+          "crossplane.io/composite": "checkout"
+        },
+        "name": "checkout-app-db-logs",
+        "namespace": "apps"
+      },
+      "spec": {
+        "forProvider": {
+          "region": "us-east-1",
+          "tags": {
+            "Environment": "production",
+            "Purpose": "application-logs"
+          }
+        },
+        "providerConfigRef": {
+          "kind": "ProviderConfig",
+          "name": "default"
+        }
+      }
+    },
+    {
+      "apiVersion": "autoscaling/v2",
+      "kind": "HorizontalPodAutoscaler",
+      "metadata": {
+        "annotations": {
+          "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+        },
+        "labels": {
+          "helm.toolkit.fluxcd.io/name": "checkout-app",
+          "helm.toolkit.fluxcd.io/namespace": "apps"
+        },
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "spec": {
+        "maxReplicas": 8,
+        "metrics": [
+          {
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "averageUtilization": 70,
+                "type": "Utilization"
+              }
+            },
+            "type": "Resource"
+          }
+        ],
+        "minReplicas": 4,
+        "scaleTargetRef": {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "name": "checkout-app"
+        }
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "Ingress",
+      "metadata": {
+        "annotations": {
+          "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+        },
+        "labels": {
+          "helm.toolkit.fluxcd.io/name": "checkout-app",
+          "helm.toolkit.fluxcd.io/namespace": "apps"
+        },
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "spec": {
+        "ingressClassName": "nginx",
+        "rules": [
+          {
+            "host": "checkout.example.test",
+            "http": {
+              "paths": [
+                {
+                  "backend": {
+                    "service": {
+                      "name": "checkout-app",
+                      "port": {
+                        "number": 80
+                      }
+                    }
+                  },
+                  "path": "/",
+                  "pathType": "Prefix"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "ai_assessment": null,
+  "changes": [
+    {
+      "action": "added",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "objectRef": {
+        "apiVersion": "s3.aws.m.upbound.io/v1beta1",
+        "kind": "Bucket",
+        "name": "checkout-app-db-logs",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XDatabase apps/checkout-app-db",
+      "old": null,
+      "new": {
+        "apiVersion": "s3.aws.m.upbound.io/v1beta1",
+        "kind": "Bucket",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "logs"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db-logs",
+          "namespace": "apps"
+        },
+        "spec": {
+          "forProvider": {
+            "region": "us-east-1",
+            "tags": {
+              "Environment": "production",
+              "Purpose": "application-logs"
+            }
+          },
+          "providerConfigRef": {
+            "kind": "ProviderConfig",
+            "name": "default"
+          }
+        }
+      },
+      "unifiedDiff": "--- Bucket.v1beta1.s3.aws.m.upbound.io/checkout-app-db-logs.apps\n+++ Bucket.v1beta1.s3.aws.m.upbound.io/checkout-app-db-logs.apps\n@@ -1 +1,18 @@\n+apiVersion: s3.aws.m.upbound.io/v1beta1\n+kind: Bucket\n+metadata:\n+  annotations:\n+    crossplane.io/composition-resource-name: logs\n+  labels:\n+    crossplane.io/composite: checkout\n+  name: checkout-app-db-logs\n+  namespace: apps\n+spec:\n+  forProvider:\n+    region: us-east-1\n+    tags:\n+      Environment: production\n+      Purpose: application-logs\n+  providerConfigRef:\n+    kind: ProviderConfig\n+    name: default\n"
+    },
+    {
+      "action": "added",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "autoscaling/v2",
+        "kind": "HorizontalPodAutoscaler",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": null,
+      "new": {
+        "apiVersion": "autoscaling/v2",
+        "kind": "HorizontalPodAutoscaler",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "maxReplicas": 8,
+          "metrics": [
+            {
+              "resource": {
+                "name": "cpu",
+                "target": {
+                  "averageUtilization": 70,
+                  "type": "Utilization"
+                }
+              },
+              "type": "Resource"
+            }
+          ],
+          "minReplicas": 4,
+          "scaleTargetRef": {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "name": "checkout-app"
+          }
+        }
+      },
+      "unifiedDiff": "--- HorizontalPodAutoscaler.v2.autoscaling/checkout-app.apps\n+++ HorizontalPodAutoscaler.v2.autoscaling/checkout-app.apps\n@@ -1 +1,24 @@\n+apiVersion: autoscaling/v2\n+kind: HorizontalPodAutoscaler\n+metadata:\n+  annotations:\n+    fmp.tobiash.github.io/producer: HelmRelease apps/checkout-app\n+  labels:\n+    helm.toolkit.fluxcd.io/name: checkout-app\n+    helm.toolkit.fluxcd.io/namespace: apps\n+  name: checkout-app\n+  namespace: apps\n+spec:\n+  maxReplicas: 8\n+  metrics:\n+  - resource:\n+      name: cpu\n+      target:\n+        averageUtilization: 70\n+        type: Utilization\n+    type: Resource\n+  minReplicas: 4\n+  scaleTargetRef:\n+    apiVersion: apps/v1\n+    kind: Deployment\n+    name: checkout-app\n"
+    },
+    {
+      "action": "added",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": null,
+      "new": {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "ingressClassName": "nginx",
+          "rules": [
+            {
+              "host": "checkout.example.test",
+              "http": {
+                "paths": [
+                  {
+                    "backend": {
+                      "service": {
+                        "name": "checkout-app",
+                        "port": {
+                          "number": 80
+                        }
+                      }
+                    },
+                    "path": "/",
+                    "pathType": "Prefix"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "unifiedDiff": "--- Ingress.v1.networking.k8s.io/checkout-app.apps\n+++ Ingress.v1.networking.k8s.io/checkout-app.apps\n@@ -1 +1,23 @@\n+apiVersion: networking.k8s.io/v1\n+kind: Ingress\n+metadata:\n+  annotations:\n+    fmp.tobiash.github.io/producer: HelmRelease apps/checkout-app\n+  labels:\n+    helm.toolkit.fluxcd.io/name: checkout-app\n+    helm.toolkit.fluxcd.io/namespace: apps\n+  name: checkout-app\n+  namespace: apps\n+spec:\n+  ingressClassName: nginx\n+  rules:\n+  - host: checkout.example.test\n+    http:\n+      paths:\n+      - backend:\n+          service:\n+            name: checkout-app\n+            port:\n+              number: 80\n+        path: /\n+        pathType: Prefix\n"
+    },
+    {
+      "logicalId": "logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29",
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XCache apps/checkout-app-cache",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "eviction": "allkeys-lru",
+          "maxMemoryMiB": "1024"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "policy"
+          },
+          "generateName": "checkout-app-cache-policy-",
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "eviction": "allkeys-lru",
+          "maxMemoryMiB": "2048"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "policy"
+          },
+          "generateName": "checkout-app-cache-policy-",
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29\n+++ logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   eviction: allkeys-lru\n-  maxMemoryMiB: \"1024\"\n+  maxMemoryMiB: \"2048\"\n kind: ConfigMap\n metadata:\n   annotations:\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-cache-settings",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XCache apps/checkout-app-cache",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "capacityGiB": "1",
+          "environment": "production"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "settings"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "name": "checkout-app-cache-settings",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "capacityGiB": "2",
+          "environment": "production"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "settings"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "name": "checkout-app-cache-settings",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-cache-settings.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-cache-settings.apps\n@@ -1,6 +1,6 @@\n apiVersion: v1\n data:\n-  capacityGiB: \"1\"\n+  capacityGiB: \"2\"\n   environment: production\n kind: ConfigMap\n metadata:\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-values",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "Kustomization apps/checkout-app-config",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 2\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 4\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-values.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-values.apps\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   values.yaml: |\n-    replicaCount: 2\n+    replicaCount: 4\n kind: ConfigMap\n metadata:\n   name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.27.4",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 4,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.28.0",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "512Mi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "256Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "unifiedDiff": "--- Deployment.v1.apps/checkout-app.apps\n+++ Deployment.v1.apps/checkout-app.apps\n@@ -11,7 +11,7 @@\n   name: checkout-app\n   namespace: apps\n spec:\n-  replicas: 2\n+  replicas: 4\n   selector:\n     matchLabels:\n       app.kubernetes.io/instance: checkout-app\n@@ -22,7 +22,7 @@\n         app.kubernetes.io/name: checkout\n     spec:\n       containers:\n-      - image: nginx:1.27.4\n+      - image: nginx:1.28.0\n         name: web\n         ports:\n         - containerPort: 80\n@@ -33,7 +33,7 @@\n             port: http\n         resources:\n           limits:\n-            memory: 256Mi\n+            memory: 512Mi\n           requests:\n-            cpu: 100m\n-            memory: 128Mi\n+            cpu: 250m\n+            memory: 256Mi\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "new": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 2,
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "size": "medium"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "unifiedDiff": "--- HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n+++ HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n@@ -19,13 +19,13 @@\n   interval: 1m\n   releaseName: checkout-app\n   values:\n-    cacheGiB: 1\n-    debug: true\n+    cacheGiB: 2\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    size: small\n+    image: nginx:1.28.0\n+    size: medium\n   valuesFrom:\n   - kind: ConfigMap\n     name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "objectRef": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "name": "checkout-app-db",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XDatabase apps/checkout-app-db",
+      "old": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "rds"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "forProvider": {
+            "allocatedStorage": 20,
+            "engine": "postgres",
+            "engineVersion": "16.6",
+            "instanceClass": "db.t3.small",
+            "manageMasterUserPassword": true,
+            "publiclyAccessible": false,
+            "region": "us-east-1",
+            "skipFinalSnapshot": true,
+            "storageEncrypted": true,
+            "storageType": "gp3",
+            "tags": {
+              "Environment": "production"
+            },
+            "username": "preview_admin"
+          },
+          "providerConfigRef": {
+            "kind": "ProviderConfig",
+            "name": "default"
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "rds"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "forProvider": {
+            "allocatedStorage": 40,
+            "engine": "postgres",
+            "engineVersion": "16.6",
+            "instanceClass": "db.t3.medium",
+            "manageMasterUserPassword": true,
+            "publiclyAccessible": false,
+            "region": "us-east-1",
+            "skipFinalSnapshot": true,
+            "storageEncrypted": true,
+            "storageType": "gp3",
+            "tags": {
+              "Environment": "production"
+            },
+            "username": "preview_admin"
+          },
+          "providerConfigRef": {
+            "kind": "ProviderConfig",
+            "name": "default"
+          }
+        }
+      },
+      "unifiedDiff": "--- Instance.v1beta1.rds.aws.m.upbound.io/checkout-app-db.apps\n+++ Instance.v1beta1.rds.aws.m.upbound.io/checkout-app-db.apps\n@@ -9,10 +9,10 @@\n   namespace: apps\n spec:\n   forProvider:\n-    allocatedStorage: 20\n+    allocatedStorage: 40\n     engine: postgres\n     engineVersion: \"16.6\"\n-    instanceClass: db.t3.small\n+    instanceClass: db.t3.medium\n     manageMasterUserPassword: true\n     publiclyAccessible: false\n     region: us-east-1\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "name": "checkout-app-config",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "2"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "4"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n+++ Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n@@ -13,7 +13,7 @@\n   postBuild:\n     substitute:\n       APP_NAME: checkout-app\n-      APP_REPLICAS: \"2\"\n+      APP_REPLICAS: \"4\"\n   prune: true\n   sourceRef:\n     kind: GitRepository\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.small",
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "dbInstanceClass": "db.t3.medium",
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "logs": true,
+            "replicas": 4,
+            "size": "medium",
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XApplication.v1alpha1.platform.example.org/checkout-app.apps\n+++ XApplication.v1alpha1.platform.example.org/checkout-app.apps\n@@ -9,14 +9,14 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    dbInstanceClass: db.t3.small\n-    debug: true\n+    cacheGiB: 2\n+    dbInstanceClass: db.t3.medium\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    logs: false\n-    replicas: 2\n-    size: small\n-    storage: 20\n+    image: nginx:1.28.0\n+    logs: true\n+    replicas: 4\n+    size: medium\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "name": "checkout-app-cache",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app-cache",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "debug": true,
+            "environment": "production"
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app-cache",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "debug": false,
+            "environment": "production"
+          }
+        }
+      },
+      "unifiedDiff": "--- XCache.v1alpha1.platform.example.org/checkout-app-cache.apps\n+++ XCache.v1alpha1.platform.example.org/checkout-app-cache.apps\n@@ -10,6 +10,6 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    debug: true\n+    cacheGiB: 2\n+    debug: false\n     environment: production\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "name": "checkout-app-db",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "database"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "dbInstanceClass": "db.t3.small",
+            "environment": "production",
+            "logs": false,
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "database"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "dbInstanceClass": "db.t3.medium",
+            "environment": "production",
+            "logs": true,
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XDatabase.v1alpha1.platform.example.org/checkout-app-db.apps\n+++ XDatabase.v1alpha1.platform.example.org/checkout-app-db.apps\n@@ -9,7 +9,7 @@\n   namespace: apps\n spec:\n   config:\n-    dbInstanceClass: db.t3.small\n+    dbInstanceClass: db.t3.medium\n     environment: production\n-    logs: false\n-    storage: 20\n+    logs: true\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "name": "checkout",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "Kustomization flux-system/platform-root",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.small",
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "dbInstanceClass": "db.t3.medium",
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "logs": true,
+            "replicas": 4,
+            "size": "medium",
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XPlatform.v1alpha1.platform.example.org/checkout.apps\n+++ XPlatform.v1alpha1.platform.example.org/checkout.apps\n@@ -5,14 +5,14 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    dbInstanceClass: db.t3.small\n-    debug: true\n+    cacheGiB: 2\n+    dbInstanceClass: db.t3.medium\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    logs: false\n-    replicas: 2\n-    size: small\n-    storage: 20\n+    image: nginx:1.28.0\n+    logs: true\n+    replicas: 4\n+    size: medium\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-values",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "Kustomization apps/checkout-app-config",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 1\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 2\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-values.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-values.apps\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   values.yaml: |\n-    replicaCount: 1\n+    replicaCount: 2\n kind: ConfigMap\n metadata:\n   name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 1,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.27.4",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.28.0",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "unifiedDiff": "--- Deployment.v1.apps/checkout-app.apps\n+++ Deployment.v1.apps/checkout-app.apps\n@@ -11,7 +11,7 @@\n   name: checkout-app\n   namespace: apps\n spec:\n-  replicas: 1\n+  replicas: 2\n   selector:\n     matchLabels:\n       app.kubernetes.io/instance: checkout-app\n@@ -22,7 +22,7 @@\n         app.kubernetes.io/name: checkout\n     spec:\n       containers:\n-      - image: nginx:1.27.4\n+      - image: nginx:1.28.0\n         name: web\n         ports:\n         - containerPort: 80\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "new": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "unifiedDiff": "--- HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n+++ HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n@@ -24,7 +24,7 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     size: small\n   valuesFrom:\n   - kind: ConfigMap\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "name": "checkout-app-config",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "1"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "2"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n+++ Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n@@ -13,7 +13,7 @@\n   postBuild:\n     substitute:\n       APP_NAME: checkout-app\n-      APP_REPLICAS: \"1\"\n+      APP_REPLICAS: \"2\"\n   prune: true\n   sourceRef:\n     kind: GitRepository\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 1,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "unifiedDiff": "--- XApplication.v1alpha1.platform.example.org/checkout-app.apps\n+++ XApplication.v1alpha1.platform.example.org/checkout-app.apps\n@@ -15,8 +15,8 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     logs: false\n-    replicas: 1\n+    replicas: 2\n     size: small\n     storage: 20\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "name": "checkout",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "Kustomization flux-system/platform-root",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 1,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "unifiedDiff": "--- XPlatform.v1alpha1.platform.example.org/checkout.apps\n+++ XPlatform.v1alpha1.platform.example.org/checkout.apps\n@@ -11,8 +11,8 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     logs: false\n-    replicas: 1\n+    replicas: 2\n     size: small\n     storage: 20\n"
+    },
+    {
+      "action": "deleted",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-cache-debug",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XCache apps/checkout-app-cache",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "logLevel": "debug"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "debug"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "name": "checkout-app-cache-debug",
+          "namespace": "apps"
+        }
+      },
+      "new": null,
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-cache-debug.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-cache-debug.apps\n@@ -1,11 +1 @@\n-apiVersion: v1\n-data:\n-  logLevel: debug\n-kind: ConfigMap\n-metadata:\n-  annotations:\n-    crossplane.io/composition-resource-name: debug\n-  labels:\n-    crossplane.io/composite: checkout-app-cache\n-  name: checkout-app-cache-debug\n-  namespace: apps\n"
+    }
+  ],
+  "complete": true,
+  "deleted": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "name": "checkout-app-cache-debug",
+      "namespace": "apps"
+    }
+  ],
+  "modified": [
+    {
+      "logicalId": "logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29",
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XCache apps/checkout-app-cache",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "eviction": "allkeys-lru",
+          "maxMemoryMiB": "1024"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "policy"
+          },
+          "generateName": "checkout-app-cache-policy-",
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "eviction": "allkeys-lru",
+          "maxMemoryMiB": "2048"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "policy"
+          },
+          "generateName": "checkout-app-cache-policy-",
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29\n+++ logical:crossplane:c841233ccbf49a31cc3cbf495bdb03efd00531d7105871476f3ccc67aabb8e29\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   eviction: allkeys-lru\n-  maxMemoryMiB: \"1024\"\n+  maxMemoryMiB: \"2048\"\n kind: ConfigMap\n metadata:\n   annotations:\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-cache",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XCache apps/checkout-app-cache"
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-cache-settings",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XCache apps/checkout-app-cache",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "capacityGiB": "1",
+          "environment": "production"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "settings"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "name": "checkout-app-cache-settings",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "capacityGiB": "2",
+          "environment": "production"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "settings"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout-app-cache"
+          },
+          "name": "checkout-app-cache-settings",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-cache-settings.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-cache-settings.apps\n@@ -1,6 +1,6 @@\n apiVersion: v1\n data:\n-  capacityGiB: \"1\"\n+  capacityGiB: \"2\"\n   environment: production\n kind: ConfigMap\n metadata:\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-values",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "Kustomization apps/checkout-app-config",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 2\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 4\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-values.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-values.apps\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   values.yaml: |\n-    replicaCount: 2\n+    replicaCount: 4\n kind: ConfigMap\n metadata:\n   name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.27.4",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 4,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.28.0",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "512Mi"
+                    },
+                    "requests": {
+                      "cpu": "250m",
+                      "memory": "256Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "unifiedDiff": "--- Deployment.v1.apps/checkout-app.apps\n+++ Deployment.v1.apps/checkout-app.apps\n@@ -11,7 +11,7 @@\n   name: checkout-app\n   namespace: apps\n spec:\n-  replicas: 2\n+  replicas: 4\n   selector:\n     matchLabels:\n       app.kubernetes.io/instance: checkout-app\n@@ -22,7 +22,7 @@\n         app.kubernetes.io/name: checkout\n     spec:\n       containers:\n-      - image: nginx:1.27.4\n+      - image: nginx:1.28.0\n         name: web\n         ports:\n         - containerPort: 80\n@@ -33,7 +33,7 @@\n             port: http\n         resources:\n           limits:\n-            memory: 256Mi\n+            memory: 512Mi\n           requests:\n-            cpu: 100m\n-            memory: 128Mi\n+            cpu: 250m\n+            memory: 256Mi\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "new": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 2,
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "size": "medium"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "unifiedDiff": "--- HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n+++ HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n@@ -19,13 +19,13 @@\n   interval: 1m\n   releaseName: checkout-app\n   values:\n-    cacheGiB: 1\n-    debug: true\n+    cacheGiB: 2\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    size: small\n+    image: nginx:1.28.0\n+    size: medium\n   valuesFrom:\n   - kind: ConfigMap\n     name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app-db",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XDatabase apps/checkout-app-db"
+      },
+      "objectRef": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "name": "checkout-app-db",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XDatabase apps/checkout-app-db",
+      "old": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "rds"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "forProvider": {
+            "allocatedStorage": 20,
+            "engine": "postgres",
+            "engineVersion": "16.6",
+            "instanceClass": "db.t3.small",
+            "manageMasterUserPassword": true,
+            "publiclyAccessible": false,
+            "region": "us-east-1",
+            "skipFinalSnapshot": true,
+            "storageEncrypted": true,
+            "storageType": "gp3",
+            "tags": {
+              "Environment": "production"
+            },
+            "username": "preview_admin"
+          },
+          "providerConfigRef": {
+            "kind": "ProviderConfig",
+            "name": "default"
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "rds.aws.m.upbound.io/v1beta1",
+        "kind": "Instance",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "rds"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "forProvider": {
+            "allocatedStorage": 40,
+            "engine": "postgres",
+            "engineVersion": "16.6",
+            "instanceClass": "db.t3.medium",
+            "manageMasterUserPassword": true,
+            "publiclyAccessible": false,
+            "region": "us-east-1",
+            "skipFinalSnapshot": true,
+            "storageEncrypted": true,
+            "storageType": "gp3",
+            "tags": {
+              "Environment": "production"
+            },
+            "username": "preview_admin"
+          },
+          "providerConfigRef": {
+            "kind": "ProviderConfig",
+            "name": "default"
+          }
+        }
+      },
+      "unifiedDiff": "--- Instance.v1beta1.rds.aws.m.upbound.io/checkout-app-db.apps\n+++ Instance.v1beta1.rds.aws.m.upbound.io/checkout-app-db.apps\n@@ -9,10 +9,10 @@\n   namespace: apps\n spec:\n   forProvider:\n-    allocatedStorage: 20\n+    allocatedStorage: 40\n     engine: postgres\n     engineVersion: \"16.6\"\n-    instanceClass: db.t3.small\n+    instanceClass: db.t3.medium\n     manageMasterUserPassword: true\n     publiclyAccessible: false\n     region: us-east-1\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "name": "checkout-app-config",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "2"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "4"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n+++ Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n@@ -13,7 +13,7 @@\n   postBuild:\n     substitute:\n       APP_NAME: checkout-app\n-      APP_REPLICAS: \"2\"\n+      APP_REPLICAS: \"4\"\n   prune: true\n   sourceRef:\n     kind: GitRepository\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.small",
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "dbInstanceClass": "db.t3.medium",
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "logs": true,
+            "replicas": 4,
+            "size": "medium",
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XApplication.v1alpha1.platform.example.org/checkout-app.apps\n+++ XApplication.v1alpha1.platform.example.org/checkout-app.apps\n@@ -9,14 +9,14 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    dbInstanceClass: db.t3.small\n-    debug: true\n+    cacheGiB: 2\n+    dbInstanceClass: db.t3.medium\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    logs: false\n-    replicas: 2\n-    size: small\n-    storage: 20\n+    image: nginx:1.28.0\n+    logs: true\n+    replicas: 4\n+    size: medium\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "name": "checkout-app-cache",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app-cache",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "debug": true,
+            "environment": "production"
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XCache",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app-cache",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "debug": false,
+            "environment": "production"
+          }
+        }
+      },
+      "unifiedDiff": "--- XCache.v1alpha1.platform.example.org/checkout-app-cache.apps\n+++ XCache.v1alpha1.platform.example.org/checkout-app-cache.apps\n@@ -10,6 +10,6 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    debug: true\n+    cacheGiB: 2\n+    debug: false\n     environment: production\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "name": "checkout-app-db",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "database"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "dbInstanceClass": "db.t3.small",
+            "environment": "production",
+            "logs": false,
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XDatabase",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "database"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-db",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "dbInstanceClass": "db.t3.medium",
+            "environment": "production",
+            "logs": true,
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XDatabase.v1alpha1.platform.example.org/checkout-app-db.apps\n+++ XDatabase.v1alpha1.platform.example.org/checkout-app-db.apps\n@@ -9,7 +9,7 @@\n   namespace: apps\n spec:\n   config:\n-    dbInstanceClass: db.t3.small\n+    dbInstanceClass: db.t3.medium\n     environment: production\n-    logs: false\n-    storage: 20\n+    logs: true\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "name": "checkout",
+        "namespace": "apps"
+      },
+      "cluster": "production",
+      "producer": "Kustomization flux-system/platform-root",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.small",
+            "debug": true,
+            "environment": "production",
+            "expose": false,
+            "host": "checkout.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 2,
+            "dbInstanceClass": "db.t3.medium",
+            "debug": false,
+            "environment": "production",
+            "expose": true,
+            "host": "checkout.example.test",
+            "image": "nginx:1.28.0",
+            "logs": true,
+            "replicas": 4,
+            "size": "medium",
+            "storage": 40
+          }
+        }
+      },
+      "unifiedDiff": "--- XPlatform.v1alpha1.platform.example.org/checkout.apps\n+++ XPlatform.v1alpha1.platform.example.org/checkout.apps\n@@ -5,14 +5,14 @@\n   namespace: apps\n spec:\n   config:\n-    cacheGiB: 1\n-    dbInstanceClass: db.t3.small\n-    debug: true\n+    cacheGiB: 2\n+    dbInstanceClass: db.t3.medium\n+    debug: false\n     environment: production\n-    expose: false\n+    expose: true\n     host: checkout.example.test\n-    image: nginx:1.27.4\n-    logs: false\n-    replicas: 2\n-    size: small\n-    storage: 20\n+    image: nginx:1.28.0\n+    logs: true\n+    replicas: 4\n+    size: medium\n+    storage: 40\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "checkout-app-config",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "checkout-app-values",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "Kustomization apps/checkout-app-config",
+      "old": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 1\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "v1",
+        "data": {
+          "values.yaml": "replicaCount: 2\n"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "checkout-app-values",
+          "namespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- ConfigMap.v1.[noGrp]/checkout-app-values.apps\n+++ ConfigMap.v1.[noGrp]/checkout-app-values.apps\n@@ -1,7 +1,7 @@\n apiVersion: v1\n data:\n   values.yaml: |\n-    replicaCount: 1\n+    replicaCount: 2\n kind: ConfigMap\n metadata:\n   name: checkout-app-values\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "HelmRelease",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "HelmRelease apps/checkout-app",
+      "old": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 1,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.27.4",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "annotations": {
+            "fmp.tobiash.github.io/producer": "HelmRelease apps/checkout-app"
+          },
+          "labels": {
+            "app.kubernetes.io/instance": "checkout-app",
+            "app.kubernetes.io/name": "checkout",
+            "helm.toolkit.fluxcd.io/name": "checkout-app",
+            "helm.toolkit.fluxcd.io/namespace": "apps"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": {
+            "matchLabels": {
+              "app.kubernetes.io/instance": "checkout-app"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/instance": "checkout-app",
+                "app.kubernetes.io/name": "checkout"
+              }
+            },
+            "spec": {
+              "containers": [
+                {
+                  "image": "nginx:1.28.0",
+                  "name": "web",
+                  "ports": [
+                    {
+                      "containerPort": 80,
+                      "name": "http"
+                    }
+                  ],
+                  "readinessProbe": {
+                    "httpGet": {
+                      "path": "/",
+                      "port": "http"
+                    }
+                  },
+                  "resources": {
+                    "limits": {
+                      "memory": "256Mi"
+                    },
+                    "requests": {
+                      "cpu": "100m",
+                      "memory": "128Mi"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "unifiedDiff": "--- Deployment.v1.apps/checkout-app.apps\n+++ Deployment.v1.apps/checkout-app.apps\n@@ -11,7 +11,7 @@\n   name: checkout-app\n   namespace: apps\n spec:\n-  replicas: 1\n+  replicas: 2\n   selector:\n     matchLabels:\n       app.kubernetes.io/instance: checkout-app\n@@ -22,7 +22,7 @@\n         app.kubernetes.io/name: checkout\n     spec:\n       containers:\n-      - image: nginx:1.27.4\n+      - image: nginx:1.28.0\n         name: web\n         ports:\n         - containerPort: 80\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout-app",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XApplication apps/checkout-app"
+      },
+      "objectRef": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XApplication apps/checkout-app",
+      "old": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "new": {
+        "apiVersion": "helm.toolkit.fluxcd.io/v2",
+        "kind": "HelmRelease",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "chart"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "chart": {
+            "spec": {
+              "chart": "./charts/checkout",
+              "reconcileStrategy": "Revision",
+              "sourceRef": {
+                "kind": "GitRepository",
+                "name": "example-repo",
+                "namespace": "flux-system"
+              }
+            }
+          },
+          "interval": "1m",
+          "releaseName": "checkout-app",
+          "values": {
+            "cacheGiB": 1,
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "size": "small"
+          },
+          "valuesFrom": [
+            {
+              "kind": "ConfigMap",
+              "name": "checkout-app-values",
+              "valuesKey": "values.yaml"
+            }
+          ]
+        }
+      },
+      "unifiedDiff": "--- HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n+++ HelmRelease.v2.helm.toolkit.fluxcd.io/checkout-app.apps\n@@ -24,7 +24,7 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     size: small\n   valuesFrom:\n   - kind: ConfigMap\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "name": "checkout-app-config",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "1"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "new": {
+        "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+        "kind": "Kustomization",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "app-config"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app-config",
+          "namespace": "apps"
+        },
+        "spec": {
+          "interval": "1m",
+          "path": "./app-config",
+          "postBuild": {
+            "substitute": {
+              "APP_NAME": "checkout-app",
+              "APP_REPLICAS": "2"
+            }
+          },
+          "prune": true,
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "example-repo",
+            "namespace": "flux-system"
+          },
+          "targetNamespace": "apps"
+        }
+      },
+      "unifiedDiff": "--- Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n+++ Kustomization.v1.kustomize.toolkit.fluxcd.io/checkout-app-config.apps\n@@ -13,7 +13,7 @@\n   postBuild:\n     substitute:\n       APP_NAME: checkout-app\n-      APP_REPLICAS: \"1\"\n+      APP_REPLICAS: \"2\"\n   prune: true\n   sourceRef:\n     kind: GitRepository\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "beforeOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "afterOrigin": {
+        "Kind": "XR",
+        "Name": "checkout",
+        "Namespace": "apps",
+        "Path": "",
+        "Text": "XR XPlatform apps/checkout"
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "name": "checkout-app",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "XR XPlatform apps/checkout",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 1,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XApplication",
+        "metadata": {
+          "annotations": {
+            "crossplane.io/composition-resource-name": "application"
+          },
+          "labels": {
+            "crossplane.io/composite": "checkout"
+          },
+          "name": "checkout-app",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "unifiedDiff": "--- XApplication.v1alpha1.platform.example.org/checkout-app.apps\n+++ XApplication.v1alpha1.platform.example.org/checkout-app.apps\n@@ -15,8 +15,8 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     logs: false\n-    replicas: 1\n+    replicas: 2\n     size: small\n     storage: 20\n"
+    },
+    {
+      "action": "modified",
+      "provenance": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "beforeOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "afterOrigin": {
+        "Kind": "Kustomization",
+        "Name": "platform-root",
+        "Namespace": "flux-system",
+        "Path": "",
+        "Text": ""
+      },
+      "objectRef": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "name": "checkout",
+        "namespace": "apps"
+      },
+      "cluster": "staging",
+      "producer": "Kustomization flux-system/platform-root",
+      "old": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.27.4",
+            "logs": false,
+            "replicas": 1,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "new": {
+        "apiVersion": "platform.example.org/v1alpha1",
+        "kind": "XPlatform",
+        "metadata": {
+          "name": "checkout",
+          "namespace": "apps"
+        },
+        "spec": {
+          "config": {
+            "cacheGiB": 1,
+            "dbInstanceClass": "db.t3.micro",
+            "debug": false,
+            "environment": "staging",
+            "expose": false,
+            "host": "checkout.staging.example.test",
+            "image": "nginx:1.28.0",
+            "logs": false,
+            "replicas": 2,
+            "size": "small",
+            "storage": 20
+          }
+        }
+      },
+      "unifiedDiff": "--- XPlatform.v1alpha1.platform.example.org/checkout.apps\n+++ XPlatform.v1alpha1.platform.example.org/checkout.apps\n@@ -11,8 +11,8 @@\n     environment: staging\n     expose: false\n     host: checkout.staging.example.test\n-    image: nginx:1.27.4\n+    image: nginx:1.28.0\n     logs: false\n-    replicas: 1\n+    replicas: 2\n     size: small\n     storage: 20\n"
+    }
+  ],
+  "policy": {
+    "classifications": [
+      {
+        "id": "image_update",
+        "title": "Container image updated",
+        "severity": "info",
+        "priority": 20,
+        "message": "Deployment image changed",
+        "provenance": "policy",
+        "cluster": "production",
+        "kind": "Deployment",
+        "namespace": "apps",
+        "name": "checkout-app"
+      },
+      {
+        "id": "ingress_change",
+        "title": "Networking changed",
+        "severity": "warning",
+        "priority": 50,
+        "message": "Ingress routing changed",
+        "provenance": "policy",
+        "cluster": "production",
+        "kind": "Ingress",
+        "namespace": "apps",
+        "name": "checkout-app"
+      },
+      {
+        "id": "replicas_change",
+        "title": "Replica count changed",
+        "severity": "info",
+        "priority": 30,
+        "message": "Replicas changed from 2 to 4",
+        "provenance": "policy",
+        "cluster": "production",
+        "kind": "Deployment",
+        "namespace": "apps",
+        "name": "checkout-app"
+      },
+      {
+        "id": "image_update",
+        "title": "Container image updated",
+        "severity": "info",
+        "priority": 20,
+        "message": "Deployment image changed",
+        "provenance": "policy",
+        "cluster": "staging",
+        "kind": "Deployment",
+        "namespace": "apps",
+        "name": "checkout-app"
+      },
+      {
+        "id": "replicas_change",
+        "title": "Replica count changed",
+        "severity": "info",
+        "priority": 30,
+        "message": "Replicas changed from 1 to 2",
+        "provenance": "policy",
+        "cluster": "staging",
+        "kind": "Deployment",
+        "namespace": "apps",
+        "name": "checkout-app"
+      }
+    ],
+    "labels": [
+      "capacity-change",
+      "image-update",
+      "needs-network-review"
+    ],
+    "policy_failed": false
+  },
+  "warnings": null
+}

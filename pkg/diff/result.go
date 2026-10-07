@@ -7,7 +7,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	k8qdiff "github.com/tobiash/k8q/pkg/diff"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 )
@@ -30,6 +30,7 @@ type DiffResultJSON struct {
 
 // DiffChangeJSON represents a modified resource with before/after snapshots.
 type DiffChangeJSON struct {
+	LogicalID    string             `json:"logicalId,omitempty"`
 	Action       string             `json:"action"`
 	Provenance   render.Provenance  `json:"provenance"`
 	BeforeOrigin *render.Provenance `json:"beforeOrigin,omitempty"`
@@ -44,6 +45,7 @@ type DiffChangeJSON struct {
 
 // ResourceChange describes a single resource change in a diff.
 type ResourceChange struct {
+	LogicalID    string
 	BeforeOrigin *render.Provenance
 	AfterOrigin  *render.Provenance
 	Cluster      string
@@ -115,7 +117,14 @@ func (c ResourceChange) UnifiedDiff() string {
 	if after == "" {
 		after = mustYAMLMap(c.New)
 	}
-	return UnifiedDiff(c.ID.String(), before, after)
+	return UnifiedDiff(c.diffHeading(), before, after)
+}
+
+func (c ResourceChange) diffHeading() string {
+	if c.LogicalID != "" {
+		return c.LogicalID
+	}
+	return c.ID.String()
 }
 
 // ChangeBreakdown holds added/modified/deleted counts for a category like kind.
@@ -183,6 +192,7 @@ func (r *DiffResult) ToJSON() *DiffResultJSON {
 	out := &DiffResultJSON{Added: []map[string]any{}, Deleted: []ObjectRef{}, Modified: []DiffChangeJSON{}, Changes: []DiffChangeJSON{}}
 	for _, c := range r.Changes() {
 		out.Changes = append(out.Changes, DiffChangeJSON{
+			LogicalID: c.LogicalID,
 			ObjectRef: ObjectRef{APIVersion: gvkAPIVersion(c.ID.Group, c.ID.Version), Kind: c.Kind, Name: c.Name, Namespace: c.Namespace},
 			Action:    c.Action, Cluster: c.Cluster, Producer: c.Producer, Provenance: c.Provenance,
 			BeforeOrigin: c.BeforeOrigin, AfterOrigin: c.AfterOrigin,
@@ -202,7 +212,8 @@ func (r *DiffResult) ToJSON() *DiffResultJSON {
 	}
 	for _, c := range r.Modified {
 		out.Modified = append(out.Modified, DiffChangeJSON{
-			Action: c.Action, Provenance: c.Provenance, BeforeOrigin: c.BeforeOrigin, AfterOrigin: c.AfterOrigin,
+			LogicalID: c.LogicalID,
+			Action:    c.Action, Provenance: c.Provenance, BeforeOrigin: c.BeforeOrigin, AfterOrigin: c.AfterOrigin,
 			ObjectRef: ObjectRef{
 				APIVersion: gvkAPIVersion(c.ID.Group, c.ID.Version),
 				Kind:       c.Kind,
@@ -351,13 +362,13 @@ func ChangeSet(a, b *render.Render) (*DiffResult, error) {
 // WriteUnified writes the unified text representation of a change set.
 func (r *DiffResult) WriteUnified(w io.Writer) {
 	for _, change := range r.Deleted {
-		formatUnified(w, computeDiff(change.ID.String(), change.oldText(), ""))
+		formatUnified(w, computeDiff(change.diffHeading(), change.oldText(), ""))
 	}
 	for _, change := range r.Added {
-		formatUnified(w, computeDiff(change.ID.String(), "", change.newText()))
+		formatUnified(w, computeDiff(change.diffHeading(), "", change.newText()))
 	}
 	for _, change := range r.Modified {
-		formatUnified(w, computeDiff(change.ID.String(), change.oldText(), change.newText()))
+		formatUnified(w, computeDiff(change.diffHeading(), change.oldText(), change.newText()))
 	}
 }
 
@@ -389,7 +400,8 @@ func sortChanges(changes []ResourceChange) {
 }
 
 func changeSortKey(change ResourceChange) string {
-	return change.Cluster + "\x00" + change.Kind + "\x00" + change.Namespace + "\x00" + change.Name + "\x00" + change.Action
+	return change.Cluster + "\x00" + change.Kind + "\x00" + change.Namespace + "\x00" +
+		change.Name + "\x00" + change.LogicalID + "\x00" + change.Action
 }
 
 // DiffWithResultClustered diffs two sets of renders keyed by cluster name.

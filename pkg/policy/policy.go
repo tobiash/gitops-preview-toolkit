@@ -11,8 +11,8 @@ import (
 
 	"github.com/open-policy-agent/opa/v1/rego"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
 )
 
 //go:embed builtin.rego
@@ -29,6 +29,7 @@ type Classification struct {
 	Kind       string `json:"kind,omitempty"`
 	Namespace  string `json:"namespace,omitempty"`
 	Name       string `json:"name,omitempty"`
+	LogicalID  string `json:"logicalId,omitempty"`
 }
 
 type Violation struct {
@@ -40,6 +41,7 @@ type Violation struct {
 	Kind      string `json:"kind,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
+	LogicalID string `json:"logicalId,omitempty"`
 }
 
 type Result struct {
@@ -68,8 +70,9 @@ type diffChange struct {
 	Cluster   string         `json:"cluster,omitempty"`
 	Kind      string         `json:"kind"`
 	Name      string         `json:"name"`
-	Namespace string         `json:"namespace,omitempty"`
+	Namespace string         `json:"namespace"`
 	Producer  string         `json:"producer,omitempty"`
+	LogicalID string         `json:"logicalId,omitempty"`
 	Old       map[string]any `json:"old,omitempty"`
 	New       map[string]any `json:"new,omitempty"`
 }
@@ -196,6 +199,7 @@ func toInputChanges(result *diff.DiffResult) []diffChange {
 				Name:      change.Name,
 				Namespace: change.Namespace,
 				Producer:  change.Producer,
+				LogicalID: change.LogicalID,
 				Old:       change.Old,
 				New:       change.New,
 			})
@@ -240,7 +244,10 @@ func normalizeClassifications(items []Classification) []Classification {
 		if items[i].Namespace != items[j].Namespace {
 			return items[i].Namespace < items[j].Namespace
 		}
-		return items[i].Name < items[j].Name
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].LogicalID < items[j].LogicalID
 	})
 	return items
 }
@@ -262,7 +269,10 @@ func normalizeViolations(items []Violation) []Violation {
 		if items[i].Namespace != items[j].Namespace {
 			return items[i].Namespace < items[j].Namespace
 		}
-		return items[i].Name < items[j].Name
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].LogicalID < items[j].LogicalID
 	})
 	return items
 }

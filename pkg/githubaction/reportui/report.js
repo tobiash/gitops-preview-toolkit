@@ -13,6 +13,8 @@
 		"cluster",
 		"producer",
 		"apiVersion",
+		"name",
+		"logicalId",
 	]);
 	let focusedIndex = -1;
 	let activeSuggestion = -1;
@@ -90,7 +92,7 @@
 		renderSingleClusterPolicySignals();
 		renderAIAssessment();
 		renderKindSection();
-		renderTopChanges();
+		renderChangesPreview();
 	}
 
 	function titleForStatus() {
@@ -351,16 +353,35 @@
 		return wrap;
 	}
 
-	function renderTopChanges() {
+	function renderChangesPreview() {
+		const preview = data.resources.slice(0, 8);
+		const truncated = preview.length < data.resources.length;
 		app.append(el("h2", { text: "Changes" }));
+		if (data.resources.length > 0) {
+			app.append(el("p", {
+				class: "filter-count",
+				text: truncated
+					? `Showing ${preview.length} of ${data.resources.length} changes`
+					: `Showing all ${data.resources.length} changes`,
+			}));
+		}
 		const list = el("div", { class: "resource-list" });
-		for (const res of data.resources.slice(0, 8))
+		for (const res of preview)
 			list.append(resourceCard(res));
 		if (data.resources.length === 0)
 			list.append(
 				el("div", { class: "empty-state", text: "No changed resources." }),
 			);
 		app.append(list);
+		if (truncated) {
+			app.append(el("div", { class: "overview-actions" }, [
+				el("a", {
+					class: "button secondary",
+					href: "#resources",
+					text: `View all ${data.resources.length} changes`,
+				}),
+			]));
+		}
 	}
 
 	function renderResources(params) {
@@ -601,6 +622,7 @@
 				if (key === "namespace") return resource.namespace || "cluster-scoped";
 				if (key === "cluster") return resource.cluster || "default";
 				if (key === "producer") return resource.producer || "unknown";
+				if (key === "name") return resourceName(resource);
 				return resource[key] || "";
 			}),
 		);
@@ -616,7 +638,7 @@
 		const parsed = parseResourceQuery(filters.query);
 		return data.resources.filter((r) => {
 			const haystack =
-				`${r.name} ${r.namespace || "cluster-scoped"} ${r.kind} ${r.cluster || "default"} ${r.producer || ""} ${r.action} ${r.apiVersion || ""}`.toLowerCase();
+				`${resourceName(r)} ${r.logicalId || ""} ${r.namespace || "cluster-scoped"} ${r.kind} ${r.cluster || "default"} ${r.producer || ""} ${r.action} ${r.apiVersion || ""}`.toLowerCase();
 			return (
 				parsed.terms.every((term) => haystack.includes(term.value)) &&
 				parsed.filters.every((filter) =>
@@ -682,6 +704,7 @@
 		if (normalized === "api" || normalized === "apiversion") {
 			return "apiVersion";
 		}
+		if (normalized === "logicalid") return "logicalId";
 		return normalized;
 	}
 
@@ -689,6 +712,7 @@
 		if (key === "namespace") return (resource.namespace || "cluster-scoped").toLowerCase();
 		if (key === "cluster") return (resource.cluster || "default").toLowerCase();
 		if (key === "producer") return (resource.producer || "unknown").toLowerCase();
+		if (key === "name") return resourceName(resource).toLowerCase();
 		return String(resource[key] || "").toLowerCase();
 	}
 
@@ -710,6 +734,10 @@
 		return wrap;
 	}
 
+	function resourceName(res) {
+		return res.name || res.slot || res.logicalId || "(unnamed)";
+	}
+
 	function resourceCard(res) {
 		return el(
 			"a",
@@ -717,7 +745,8 @@
 			[
 				el("div", { class: "resource-title" }, [
 					el("strong", {
-						text: `${res.kind} / ${res.namespace || "cluster-scoped"} / ${res.name}`,
+						text: `${res.kind} / ${res.namespace || "cluster-scoped"} / ${resourceName(res)}`,
+						title: res.logicalId || res.name,
 					}),
 					el("span", { class: "resource-badges" }, [
 						el("span", {
@@ -823,12 +852,12 @@
 		app.append(
 			el("div", { class: "breadcrumb" }, [
 				el("a", { href: "#resources", text: "Resources" }),
-				document.createTextNode(` / ${res.kind} / ${res.name}`),
+				document.createTextNode(` / ${res.kind} / ${resourceName(res)}`),
 			]),
 			el("section", { class: "detail-header" }, [
 				el("div", {}, [
 					el("div", { class: "eyebrow", text: res.action }),
-					el("h1", { text: `${res.kind} ${res.name}` }),
+					el("h1", { text: `${res.kind} ${resourceName(res)}`, title: res.logicalId || res.name }),
 					el("p", {
 						text: `${res.namespace || "cluster-scoped"} · ${res.cluster || "default"} · ${res.apiVersion} · Producer: ${res.producer || "unknown"}`,
 					}),

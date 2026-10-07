@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	gitrepoexpander "github.com/tobiash/flux-manifest-preview/pkg/expander/gitrepo"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/sourcealiases"
 )
 
 // Kind describes how a diff source should be resolved.
@@ -129,6 +129,9 @@ func (s Source) Label() string {
 
 // Materialize returns a filesystem path for the source and an optional cleanup function.
 func (s Source) Materialize(ctx context.Context) (string, func(), error) {
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
 	switch s.Kind {
 	case KindPath:
 		return s.Raw, nil, nil
@@ -291,18 +294,23 @@ func gitRevisionExists(repoRoot, rev string) bool {
 	if rev == "" {
 		return false
 	}
-	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", rev+"^{tree}")
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", "--end-of-options", rev+"^{tree}")
 	return cmd.Run() == nil
 }
 
 func materializeRevision(ctx context.Context, repoRoot, rev string) (string, func(), error) {
+	// Resolve to an object ID before archive so a revision cannot inject options.
+	resolved, err := exec.CommandContext(ctx, "git", "-C", repoRoot, "rev-parse", "--verify", "--end-of-options", rev+"^{object}").Output()
+	if err != nil {
+		return "", nil, fmt.Errorf("resolving revision %q: %w", rev, err)
+	}
 	tmpDir, err := os.MkdirTemp("", "fmp-diff-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("creating temp dir for %s: %w", rev, err)
 	}
 	cleanup := func() { _ = os.RemoveAll(tmpDir) }
 
-	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "archive", "--format=tar", rev)
+	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "archive", "--format=tar", strings.TrimSpace(string(resolved)))
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cleanup()
@@ -315,6 +323,8 @@ func materializeRevision(ctx context.Context, repoRoot, rev string) (string, fun
 		return "", nil, fmt.Errorf("starting git archive %s: %w", rev, err)
 	}
 	if err := extractTar(tmpDir, stdout); err != nil {
+		_ = stdout.Close()
+		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		cleanup()
 		return "", nil, fmt.Errorf("extracting git archive %s: %w", rev, err)
@@ -323,7 +333,7 @@ func materializeRevision(ctx context.Context, repoRoot, rev string) (string, fun
 		cleanup()
 		return "", nil, fmt.Errorf("git archive %s: %s: %w", rev, strings.TrimSpace(stderr.String()), err)
 	}
-	if err := gitrepoexpander.WriteSourceRepoURLs(tmpDir, repoRoot); err != nil {
+	if err := sourcealiases.WriteSourceRepoURLsContext(ctx, tmpDir, repoRoot); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("writing source repo metadata for %s: %w", rev, err)
 	}
@@ -331,27 +341,44 @@ func materializeRevision(ctx context.Context, repoRoot, rev string) (string, fun
 }
 
 func extractTar(dest string, r io.Reader) error {
+	root, err := os.OpenRoot(dest)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
 	tr := tar.NewReader(r)
+	var symlinks []string
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
+			// Validate after extraction so forward links can resolve. Root.Stat
+			// follows the actual chain (including .. after symlinks), unlike a
+			// lexical filepath.Join check. Dangling and cyclic links fail closed.
+			for _, link := range symlinks {
+				if _, err := root.Stat(link); err != nil {
+					return fmt.Errorf("unsafe or unresolved tar symlink %q: %w", link, err)
+				}
+			}
 			return nil
 		}
 		if err != nil {
 			return err
 		}
 
-		target := filepath.Join(dest, hdr.Name)
+		if !filepath.IsLocal(hdr.Name) || strings.Contains(hdr.Name, "\\") {
+			return fmt.Errorf("unsafe tar entry %q", hdr.Name)
+		}
+		target := filepath.Clean(hdr.Name)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+			if err := root.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if err := root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
+			f, err := root.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0o777)
 			if err != nil {
 				return err
 			}
@@ -363,12 +390,16 @@ func extractTar(dest string, r io.Reader) error {
 				return err
 			}
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if filepath.IsAbs(hdr.Linkname) || strings.Contains(hdr.Linkname, "\\") || !filepath.IsLocal(filepath.Join(filepath.Dir(target), hdr.Linkname)) {
+				return fmt.Errorf("unsafe tar symlink %q -> %q", hdr.Name, hdr.Linkname)
+			}
+			if err := root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
+			if err := root.Symlink(hdr.Linkname, target); err != nil {
 				return err
 			}
+			symlinks = append(symlinks, target)
 		case tar.TypeXGlobalHeader, tar.TypeXHeader:
 			continue
 		default:

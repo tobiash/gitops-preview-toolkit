@@ -16,10 +16,12 @@ import (
 	fluxgogit "github.com/fluxcd/pkg/git/gogit"
 	gitrepository "github.com/fluxcd/pkg/git/repository"
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/sourcealiases"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/kustomize/kyaml/filesys"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 )
 
@@ -38,13 +40,15 @@ type Expander struct {
 	localPaths     map[string]string
 	sourceRoot     string
 	sourceRepoURLs map[string]struct{}
+	localOnly      bool
 }
 
 type sharedState struct {
-	clones   cloneCache
-	cloneDir string // parent directory for clones
-	cleanup  func()
-	group    singleflight.Group
+	clones    cloneCache
+	cloneDir  string // parent directory for clones
+	group     singleflight.Group
+	closeOnce sync.Once
+	closeErr  error
 }
 
 type cloneCache struct {
@@ -52,7 +56,7 @@ type cloneCache struct {
 	paths map[string]string // acquisition digest (URL and full CloneConfig) -> local path
 }
 
-const sourceRepoURLsFile = ".fmp-source-repo-urls"
+const sourceRepoURLsFile = sourcealiases.FileName
 
 var gitCloneFunc = gitClone
 
@@ -65,19 +69,20 @@ var newCloneClient = func(dest string, authOpts *fluxgit.AuthOptions) (cloneClie
 	)
 }
 
-// WriteSourceRepoURLs writes normalized source-repo aliases for a materialized tree.
+// WriteSourceRepoURLs writes source-repo aliases for a materialized tree.
 // This lets archived git revision snapshots resolve self-referential GitRepository URLs.
 func WriteSourceRepoURLs(path, repoRoot string) error {
-	urls := gitRemoteURLs(repoRoot)
-	if len(urls) == 0 {
-		return nil
-	}
-	data := strings.Join(urls, "\n") + "\n"
-	return os.WriteFile(filepath.Join(path, sourceRepoURLsFile), []byte(data), 0o644)
+	return sourcealiases.WriteSourceRepoURLs(path, repoRoot)
+}
+
+// WriteSourceRepoURLsContext writes source aliases while honoring cancellation
+// during Git discovery. Like WriteSourceRepoURLs, non-Git paths have no aliases.
+func WriteSourceRepoURLsContext(ctx context.Context, path, repoRoot string) error {
+	return sourcealiases.WriteSourceRepoURLsContext(ctx, path, repoRoot)
 }
 
 // NewExpander creates a GitRepository expander.
-// The cleanup function removes cloned repos and must be called when done.
+// Close must be called when done to remove cloned repositories.
 func NewExpander(log logr.Logger) (*Expander, error) {
 	tmpDir, err := os.MkdirTemp("", "fmp-gitrepo-*")
 	if err != nil {
@@ -87,7 +92,6 @@ func NewExpander(log logr.Logger) (*Expander, error) {
 		log: log,
 		shared: &sharedState{
 			cloneDir: tmpDir,
-			cleanup:  func() { _ = os.RemoveAll(tmpDir) },
 			clones: cloneCache{
 				paths: make(map[string]string),
 			},
@@ -98,10 +102,69 @@ func NewExpander(log logr.Logger) (*Expander, error) {
 
 // Cleanup removes all cloned repositories.
 func (e *Expander) Cleanup() {
-	if e.shared != nil && e.shared.cleanup != nil {
-		e.shared.cleanup()
-		e.shared.cleanup = nil
+	_ = e.Close()
+}
+
+// Close removes cloned repositories once, after all rendering has stopped.
+func (e *Expander) Close() error {
+	if e.shared == nil {
+		return nil
 	}
+	e.shared.closeOnce.Do(func() {
+		e.shared.closeErr = os.RemoveAll(e.shared.cloneDir)
+	})
+	return e.shared.closeErr
+}
+
+// NewLocalExpander resolves only local sources, without allocating a clone directory.
+func NewLocalExpander(root string, log logr.Logger) *Expander {
+	e := &Expander{sourceRoot: root, log: log}
+	e.SetLocalOnly()
+	return e
+}
+
+// SetLocalOnly disables cloning and scopes local sources to the current root.
+func (e *Expander) SetLocalOnly() {
+	e.localOnly = true
+	e.sourceRepoURLs = make(map[string]struct{})
+}
+
+func (e *Expander) loadLocalAliases(ctx context.Context) error {
+	// Do not invoke Git discovery here: repository config can include outside files.
+	fs := filesys.MakeFsOnDisk()
+	metadata := filepath.Join(e.sourceRoot, sourceRepoURLsFile)
+	if fs.Exists(metadata) {
+		if err := render.ValidateLocalPath(fs, e.sourceRoot, metadata); err != nil {
+			return err
+		}
+		for _, raw := range readSourceRepoURLsFile(e.sourceRoot) {
+			if normalized, ok := normalizeGitURL(raw); ok {
+				e.sourceRepoURLs[normalized] = struct{}{}
+			}
+		}
+	}
+	config := filepath.Join(e.sourceRoot, ".git", "config")
+	if fs.Exists(config) {
+		if err := render.ValidateLocalPath(fs, e.sourceRoot, config); err != nil {
+			return err
+		}
+		out, err := exec.CommandContext(ctx, "git", "config", "--file", config, "--no-includes", "--get-regexp", `^remote\..*\.url$`).Output()
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
+				return fmt.Errorf("reading local git aliases: %w", err)
+			}
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			_, raw, ok := strings.Cut(line, " ")
+			if normalized, valid := normalizeGitURL(raw); ok && valid {
+				e.sourceRepoURLs[normalized] = struct{}{}
+			}
+		}
+	}
+	return nil
 }
 
 // WithSourceRoot returns a copy of the expander scoped to one source root.
@@ -113,7 +176,11 @@ func (e *Expander) WithSourceRoot(path string) *Expander {
 		localPaths: make(map[string]string),
 		sourceRoot: path,
 	}
-	clone.sourceRepoURLs = discoverSourceRepoURLs(path)
+	if e.localOnly {
+		clone.SetLocalOnly()
+	} else {
+		clone.sourceRepoURLs = discoverSourceRepoURLs(path)
+	}
 	return clone
 }
 
@@ -129,9 +196,18 @@ func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.Expa
 
 	// Collect GitRepository resources.
 	result := &expander.ExpandResult{}
+	if e.localOnly {
+		if err := e.loadLocalAliases(ctx); err != nil {
+			result.Errors = append(result.Errors, err)
+			return result, nil
+		}
+	}
 	e.localPaths = make(map[string]string)
 	repos := make(map[string]gitRepoInfo) // "namespace/name" -> info
 	for _, res := range r.Resources() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		gvk := res.GetGvk()
 		if gvk.Group != gitRepoGVK.Group || gvk.Kind != gitRepoGVK.Kind {
 			continue
@@ -165,6 +241,9 @@ func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.Expa
 	}
 
 	for key, info := range repos {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if e.matchesCurrentSource(info.url) {
 			e.log.V(1).Info("using current repo for GitRepository", "key", key, "path", e.sourceRoot)
 			e.localPaths[key] = e.sourceRoot
@@ -174,8 +253,21 @@ func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.Expa
 		// Only clone non-local URLs. file:// and local paths are skipped.
 		if isLocalURL(info.url) {
 			localPath := stripFilePrefix(info.url)
+			if !filepath.IsAbs(localPath) {
+				localPath = filepath.Join(e.sourceRoot, localPath)
+			}
+			if e.localOnly {
+				if err := render.ValidateLocalPath(filesys.MakeFsOnDisk(), e.sourceRoot, localPath); err != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("GitRepository %s: %w", key, err))
+					continue
+				}
+			}
 			e.log.V(1).Info("using local GitRepository", "key", key, "path", localPath)
 			e.localPaths[key] = localPath
+			continue
+		}
+		if e.localOnly {
+			result.Errors = append(result.Errors, fmt.Errorf("GitRepository %s: local-only mode denies remote clone %q", key, info.url))
 			continue
 		}
 
@@ -384,7 +476,7 @@ func describeCloneConfig(cfg gitrepository.CloneConfig) string {
 }
 
 func isLocalURL(url string) bool {
-	return filepath.IsAbs(url) || len(url) > 5 && url[:5] == "file:"
+	return filepath.IsAbs(url) || strings.HasPrefix(url, "file:") || (!strings.ContainsAny(url, ":@") && url != "")
 }
 
 func stripFilePrefix(url string) string {
@@ -398,77 +490,14 @@ func stripFilePrefix(url string) string {
 }
 
 func discoverSourceRepoURLs(path string) map[string]struct{} {
-	urls := make(map[string]struct{})
-	for _, raw := range append(readSourceRepoURLsFile(path), gitRemoteURLs(path)...) {
-		normalized, ok := normalizeGitURL(raw)
-		if ok {
-			urls[normalized] = struct{}{}
-		}
-	}
-	return urls
+	aliases, _ := sourcealiases.Discover(context.Background(), path)
+	return aliases
 }
 
 func readSourceRepoURLsFile(path string) []string {
-	data, err := os.ReadFile(filepath.Join(path, sourceRepoURLsFile))
-	if err != nil {
-		return nil
-	}
-	lines := strings.Split(string(data), "\n")
-	urls := make([]string, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		urls = append(urls, line)
-	}
-	return urls
-}
-
-func gitRemoteURLs(path string) []string {
-	out, err := exec.Command("git", "-C", path, "remote").Output()
-	if err != nil {
-		return nil
-	}
-	var urls []string
-	for _, remote := range strings.Fields(string(out)) {
-		remoteOut, err := exec.Command("git", "-C", path, "remote", "get-url", "--all", remote).Output()
-		if err != nil {
-			continue
-		}
-		urls = append(urls, strings.Fields(string(remoteOut))...)
-	}
-	return urls
+	return sourcealiases.Read(path)
 }
 
 func normalizeGitURL(raw string) (string, bool) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || isLocalURL(trimmed) {
-		return "", false
-	}
-	if strings.Contains(trimmed, "://") {
-		u, err := url.Parse(trimmed)
-		if err != nil || u.Host == "" {
-			return "", false
-		}
-		host := strings.ToLower(u.Hostname())
-		path := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
-		if path == "" {
-			return "", false
-		}
-		return host + "/" + path, true
-	}
-	if at := strings.Index(trimmed, "@"); at >= 0 {
-		trimmed = trimmed[at+1:]
-	}
-	parts := strings.SplitN(trimmed, ":", 2)
-	if len(parts) != 2 {
-		return "", false
-	}
-	host := strings.ToLower(strings.TrimSpace(parts[0]))
-	path := strings.TrimSuffix(strings.Trim(strings.TrimSpace(parts[1]), "/"), ".git")
-	if host == "" || path == "" {
-		return "", false
-	}
-	return host + "/" + path, true
+	return sourcealiases.NormalizeGitURL(raw)
 }

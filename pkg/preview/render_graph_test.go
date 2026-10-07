@@ -8,40 +8,29 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander/fluxks"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
-	"sigs.k8s.io/kustomize/kyaml/filesys"
 )
 
 func TestRenderGraphBuildContexts(t *testing.T) {
-	fs := filesys.MakeFsInMemory()
-	if err := fs.MkdirAll("/repo/apps"); err != nil {
+	dir := t.TempDir()
+	writePreviewFile(t, dir, "apps/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n  namespace: original\ndata:\n  value: ${VALUE}\n")
+	for _, name := range []string{"a", "b"} {
+		writePreviewFile(t, dir, "root/"+name+".yaml", fmt.Sprintf("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: %s\n  namespace: flux\nspec:\n  path: apps\n  targetNamespace: %s\n  postBuild:\n    substitute:\n      VALUE: %s\n", name, name, name))
+	}
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fs.WriteFile("/repo/apps/cm.yaml", []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n  namespace: original\ndata:\n  value: ${VALUE}\n")); err != nil {
+	t.Cleanup(func() { _ = p.Close() })
+	loaded, err := p.loadRepo(context.Background(), dir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	g := fluxRenderGraph{loader: repoLoader{preview: &Preview{}, root: "/repo", fs: fs, log: logr.Discard(), render: render.NewDefaultRender(logr.Discard())}}
-	a := expander.DiscoveredPath{Path: "apps", Producer: "Kustomization flux/a", Namespace: "a", Substitutions: map[string]string{"VALUE": "a"}}
-	b := expander.DiscoveredPath{Path: "apps", Producer: "Kustomization flux/b", Namespace: "b", Substitutions: map[string]string{"VALUE": "b"}}
-	for _, changed := range []expander.DiscoveredPath{
-		{Path: "apps", Producer: "other", Namespace: a.Namespace, Substitutions: a.Substitutions},
-		{Path: "apps", Producer: a.Producer, Namespace: "other", Substitutions: a.Substitutions},
-		{Path: "apps", Producer: a.Producer, Namespace: a.Namespace, Substitutions: b.Substitutions},
-	} {
-		if g.pathKey(a) == g.pathKey(changed) {
-			t.Errorf("pathKey ignores build context: %+v", changed)
+	count := 0
+	for _, res := range loaded[""].render.Resources() {
+		if res.GetKind() != "ConfigMap" {
+			continue
 		}
-	}
-	runner := expander.DiscoveryRunner{PathKey: g.pathKey, RenderPath: g.renderPath}
-	if _, err := runner.Run(context.Background(), g.loader.render, []expander.DiscoveredPath{a, b}); err != nil {
-		t.Fatal(err)
-	}
-	if got := g.loader.render.Size(); got != 2 {
-		t.Fatalf("render size = %d, want 2 independent builds", got)
-	}
-	for _, res := range g.loader.render.Resources() {
+		count++
 		obj, err := res.Map()
 		if err != nil {
 			t.Fatal(err)
@@ -53,9 +42,12 @@ func TestRenderGraphBuildContexts(t *testing.T) {
 		if got := obj["data"].(map[string]any)["value"]; got != ns {
 			t.Errorf("substitution = %v, want %s", got, ns)
 		}
-		if got := g.loader.render.ProvenanceForID(res.CurId()).String(); got != "Kustomization flux/"+ns {
+		if got := loaded[""].render.ProvenanceForID(res.CurId()).String(); got != "Kustomization flux/"+ns {
 			t.Errorf("provenance = %q", got)
 		}
+	}
+	if count != 2 {
+		t.Fatalf("ConfigMaps = %d, want 2 independent builds", count)
 	}
 }
 
@@ -67,7 +59,7 @@ func TestRenderGraphBootstrapAndAliasesThroughPreview(t *testing.T) {
 			if tt.self {
 				writePreviewFile(t, dir, "apps/ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: self\n  namespace: flux-system\nspec:\n  path: ./apps\n")
 			}
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"apps", "./apps", "apps/../apps"}, tt.recursive), WithFluxKS())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"apps", "./apps", "apps/../apps"}, tt.recursive), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,7 +84,7 @@ func TestRenderGraphConflictingProducersRemainIncomplete(t *testing.T) {
 	for _, name := range []string{"first", "second"} {
 		writePreviewFile(t, dir, "apps/"+name+".yaml", fmt.Sprintf("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: %s\n  namespace: flux-system\nspec:\n  path: apps\n", name))
 	}
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"apps"}, false), WithFluxKS())
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"apps"}, false), WithFluxKS())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +99,7 @@ func TestRenderGraphRecursiveBootstrapChild(t *testing.T) {
 			dir := t.TempDir()
 			writePreviewFile(t, dir, "tree/ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: child\n  namespace: flux-system\nspec:\n  path: tree/apps\n")
 			writePreviewFile(t, dir, "tree/apps/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n")
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"tree", "./tree"}, recursive), WithFluxKS())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"tree", "./tree"}, recursive), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +136,7 @@ func TestRenderGraphRecursiveBootstrapContexts(t *testing.T) {
 				writePreviewFile(t, dir, "tree/"+owner+".yaml", fmt.Sprintf("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: %s\n  namespace: flux-system\nspec:\n  path: tree/apps\n%s", owner, tt.context))
 			}
 			writePreviewFile(t, dir, "tree/apps/cm.yaml", fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: %s\n", tt.resource))
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"tree"}, true), WithFluxKS())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"tree"}, true), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -184,7 +176,7 @@ func TestRenderGraphRecursiveKustomizeBoundary(t *testing.T) {
 			writePreviewFile(t, dir, "tree/ks.yaml", fmt.Sprintf("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: child\n  namespace: flux-system\nspec:\n  path: %s\n", target))
 			writePreviewFile(t, dir, "tree/apps/kustomization.yaml", "resources:\n- raw/cm.yaml\nnamePrefix: built-\n")
 			writePreviewFile(t, dir, "tree/apps/raw/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n")
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"tree"}, true), WithFluxKS())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"tree"}, true), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -222,7 +214,7 @@ func TestRenderGraphDistinctContextsThroughPreview(t *testing.T) {
 				}
 				writePreviewFile(t, dir, "root/"+name+".yaml", fmt.Sprintf("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: %s\n  namespace: flux-system\nspec:\n  path: apps\n%s  postBuild:\n    substitute:\n      NAME: %s\n", name, namespace, name))
 			}
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -261,7 +253,7 @@ func TestRenderGraphRawRootWithToolConfig(t *testing.T) {
 	dir := t.TempDir()
 	writePreviewFile(t, dir, ".fmp.yaml", "paths:\n- .\nsort: true\n")
 	writePreviewFile(t, dir, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n")
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"."}, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,11 +275,11 @@ func TestRenderGraphLateSourceResolution(t *testing.T) {
 				name = "unrelated"
 			}
 			writePreviewFile(t, dir, "sources/repo.yaml", fmt.Sprintf("apiVersion: source.toolkit.fluxcd.io/v1\nkind: GitRepository\nmetadata:\n  name: %s\n  namespace: flux-system\nspec:\n  url: %s\n", name, source))
-			p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS(), WithGitRepo())
+			p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"root"}, false), WithFluxKS(), WithGitRepo())
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(p.gitRepoExpander.Cleanup)
+			t.Cleanup(func() { _ = p.Close() })
 			var out bytes.Buffer
 			err = p.Test(context.Background(), dir, &out)
 			if missing {
@@ -313,7 +305,7 @@ func TestRenderGraphLateSourceResolution(t *testing.T) {
 func TestRenderGraphOmittedPathUsesSourceRoot(t *testing.T) {
 	dir := t.TempDir()
 	writePreviewFile(t, dir, "ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: self\n  namespace: flux-system\nspec:\n  prune: true\n")
-	p, err := New(WithLogger(logr.Discard()), WithPaths([]string{"."}, false), WithFluxKS())
+	p, err := newTestPreview(t, WithLogger(logr.Discard()), WithPaths([]string{"."}, false), WithFluxKS())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,25 +315,27 @@ func TestRenderGraphOmittedPathUsesSourceRoot(t *testing.T) {
 }
 
 func TestRenderGraphSelfReferenceTerminates(t *testing.T) {
-	fs := filesys.MakeFsInMemory()
-	if err := fs.MkdirAll("/repo/apps"); err != nil {
+	dir := t.TempDir()
+	writePreviewFile(t, dir, "apps/ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: self\n  namespace: flux-system\nspec:\n  path: apps\n")
+	p, err := newTestPreview(t, WithPaths([]string{"apps"}, false), WithFluxKS())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fs.WriteFile("/repo/apps/ks.yaml", []byte("apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: self\n  namespace: flux-system\nspec:\n  path: apps\n")); err != nil {
-		t.Fatal(err)
-	}
-	g := fluxRenderGraph{loader: repoLoader{preview: &Preview{}, root: "/repo", fs: fs, log: logr.Discard(), render: render.NewDefaultRender(logr.Discard())}}
-	registry := expander.NewRegistry(logr.Discard())
-	registry.Register(fluxks.NewExpander(logr.Discard()))
-	runner := expander.DiscoveryRunner{Expanders: registry, PathKey: g.pathKey, RenderPath: g.renderPath, MaxIterations: 3}
-	if _, err := runner.Run(context.Background(), g.loader.render, []expander.DiscoveredPath{{Path: "apps", Producer: "path apps"}}); err != nil {
+	t.Cleanup(func() { _ = p.Close() })
+	if err := p.Test(t.Context(), dir, &bytes.Buffer{}); err != nil {
 		t.Fatalf("self-reference failed to terminate: %v", err)
 	}
 }
 
 func TestRenderGraphMissingDiscoveredPathFails(t *testing.T) {
-	g := fluxRenderGraph{loader: repoLoader{root: "/repo", fs: filesys.MakeFsInMemory()}}
-	if err := g.renderPath(expander.DiscoveredPath{Path: "missing", Producer: "Kustomization flux/apps"}); err == nil {
-		t.Fatal("renderPath(missing discovered path) succeeded, want error")
+	dir := t.TempDir()
+	writePreviewFile(t, dir, "root/ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: apps\n  namespace: flux\nspec:\n  path: missing\n")
+	p, err := newTestPreview(t, WithPaths([]string{"root"}, false), WithFluxKS())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	if err := p.Test(t.Context(), dir, &bytes.Buffer{}); err == nil {
+		t.Fatal("Test(missing discovered path) succeeded, want error")
 	}
 }

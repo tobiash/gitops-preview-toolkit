@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/api/resmap"
 )
 
@@ -69,6 +69,9 @@ func (r *Registry) Register(e Expander) {
 func (r *Registry) Expand(ctx context.Context, render *render.Render) (*ExpandResult, error) {
 	result := &ExpandResult{Resources: resmap.New()}
 	for i, e := range r.expanders {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r.log.V(1).Info("running expander", "index", i)
 		expanded, err := e.Expand(ctx, render)
 		if err != nil {

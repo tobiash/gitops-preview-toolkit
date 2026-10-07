@@ -1,24 +1,26 @@
-# Flux Manifest Preview (`fmp`)
+# gitops-preview-toolkit
 
-[![Build Status](https://github.com/tobiash/flux-manifest-preview/actions/workflows/ci.yml/badge.svg)](https://github.com/tobiash/flux-manifest-preview/actions/workflows/ci.yml)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/tobiash/flux-manifest-preview)](https://github.com/tobiash/flux-manifest-preview/releases/latest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tobiash/flux-manifest-preview)](https://goreportcard.com/report/github.com/tobiash/flux-manifest-preview)
-[![License](https://img.shields.io/github/license/tobiash/flux-manifest-preview)](https://github.com/tobiash/flux-manifest-preview/blob/main/LICENSE)
+[![Build Status](https://github.com/tobiash/gitops-preview-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/tobiash/gitops-preview-toolkit/actions/workflows/ci.yml)
+[![GitHub release (including prereleases)](https://img.shields.io/github/v/release/tobiash/gitops-preview-toolkit?include_prereleases)](https://github.com/tobiash/gitops-preview-toolkit/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tobiash/gitops-preview-toolkit)](https://goreportcard.com/report/github.com/tobiash/gitops-preview-toolkit)
+[![License](https://img.shields.io/github/license/tobiash/gitops-preview-toolkit)](https://github.com/tobiash/gitops-preview-toolkit/blob/main/LICENSE)
 
 **Preview rendered Kubernetes resource changes before a GitOps change reaches the cluster.**
 
-`fmp` renders supported Flux, Helm, and Kustomize inputs, compares two revisions, and turns the result into CLI diffs, structured JSON, PR comments, policy checks, and an interactive HTML report. It is a local preview, not a complete implementation of Flux controller reconciliation or Kubernetes admission.
+`gitops-preview` renders supported GitOps inputs through persistent local plugins, compares two revisions, and turns the result into CLI diffs, structured JSON, PR comments, policy checks, and an interactive HTML report. `fmp` remains a compatibility executable with the same commands, flags, exit codes, `FMP_*` environment variables and Action report artifacts. Existing `fmp` examples below work with either executable.
 
-It is built for Kubernetes platform teams reviewing Flux pull requests where the source YAML is not the whole story: `Kustomization` dependencies, `HelmRelease` rendering, external `GitRepository` sources, generated metadata, and multi-cluster layouts all affect the final manifests.
+The core host owns comparison and reports. `gitops-preview-flux` owns Flux, Git, Helm and path rendering; the optional `gitops-preview-crossplane` plugin expands compositions through an external real Crossplane engine. The core binary does not embed Helm or Flux rendering libraries. The canonical repository and Go module are `github.com/tobiash/gitops-preview-toolkit`.
+
+It is built for Kubernetes platform teams reviewing GitOps pull requests where the source YAML is not the whole story: Flux `Kustomization` dependencies, `HelmRelease` rendering, external `GitRepository` sources, Crossplane composition outputs, generated metadata, and multi-cluster layouts all affect the final manifests.
 
 > [!NOTE]
-> `fmp` is under active development. It is already useful for local review and CI validation, but workflows and report details may continue to evolve.
+> `v0.2.0-rc.1` is a release candidate, not the latest stable release. Pin this version for reproducible evaluation; see the [release notes and Go API migration](docs/releases/v0.2.0-rc.1.md). Workflows and report details may continue to evolve.
 
 ---
 
 ## What it shows you
 
-Instead of asking “what YAML changed?”, `fmp` answers “what Kubernetes resources will change after Flux renders this repo?”
+Instead of asking “what YAML changed?”, `gitops-preview` answers “what desired Kubernetes resources change after the supported GitOps inputs are rendered?”
 
 ```mermaid
 flowchart TD
@@ -50,7 +52,7 @@ Enable `html-report` in the GitHub Action to generate a browsable report artifac
 | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | [![HTML report overview](docs/assets/fmp-report-overview.png)](docs/assets/fmp-report-overview.png) | [![Unified diff view](docs/assets/fmp-report-unified-diff.png)](docs/assets/fmp-report-unified-diff.png) | [![Side-by-side diff view](docs/assets/fmp-report-side-by-side-diff.png)](docs/assets/fmp-report-side-by-side-diff.png) |
 
-View the [sample HTML report in a browser](https://raw.githack.com/tobiash/flux-manifest-preview/main/docs/examples/fmp-report-example.html), or download the checked-in [single-file HTML report](docs/examples/fmp-report-example.html) to open it locally.
+View the [sample HTML report in a browser](https://raw.githack.com/tobiash/gitops-preview-toolkit/main/docs/examples/fmp-report-example.html), or download the checked-in [single-file HTML report](docs/examples/fmp-report-example.html) to open it locally. The archived sample retains its original title and payload; the [nested Crossplane/Flux example](docs/examples/nested-crossplane-flux/README.md) demonstrates the combined workflow.
 
 The report includes:
 
@@ -67,6 +69,7 @@ The report includes:
 
 - **Flux-aware rendering** — discovers `Kustomization.spec.path`, follows Flux dependency patterns, and can resolve external `GitRepository` sources.
 - **HelmRelease support** — renders `HelmRelease` resources through the Helm SDK, including post-renderers and `commonMetadata`.
+- **Crossplane composition preview** — opt-in expansion through a pinned external controller engine, with logical identities for unnamed outputs and separate evaluation evidence.
 - **Git-aware diffs** — compare `HEAD`, branches, commits, local paths, or your dirty worktree.
 - **Multi-cluster reports** — configure several cluster roots and review each cluster independently.
 - **SOPS support** — decrypt encrypted resources locally when requested.
@@ -79,22 +82,112 @@ The report includes:
 
 ## Install
 
+Install the host **and its sibling plugins**, or extract a complete release archive into one directory on `PATH`. Installing only `go install ./cmd/fmp` (or only `cmd/gitops-preview`) installs a host with no render plugin; render operations fail unless `gitops-preview-flux` is already installed beside it or on `PATH`. The Crossplane plugin is additionally needed for `--crossplane`.
+
 ### From source
 
 ```bash
+go install ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
+# Optional compatibility command:
 go install ./cmd/fmp
 ```
 
-### Latest release via Go
+To install the complete toolkit including the compatibility executable in one command:
 
 ```bash
-go install github.com/tobiash/flux-manifest-preview/cmd/fmp@latest
+go install ./cmd/fmp ./cmd/gitops-preview ./cmd/gitops-preview-flux ./cmd/gitops-preview-crossplane
 ```
+
+The Go module and GitHub source repository are `github.com/tobiash/gitops-preview-toolkit`. Test fixture builds disable VCS stamping. Release builds retain normal Go VCS behavior; the Docker action defaults to `BUILDVCS=false` for source-only build contexts and accepts `--build-arg BUILDVCS=true` when complete Git metadata is available.
+
+### Release candidate via Go
+
+After the RC tag is published, install all commands at the same explicit version:
+
+```bash
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-flux@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-crossplane@v0.2.0-rc.1
+# Optional compatibility command:
+go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.1
+```
+
+`@latest` prefers a stable Go module version when one exists; it does not select this RC over an existing stable release. GitHub's `/releases/latest` likewise excludes prereleases. Use the explicit RC tag until stable promotion.
 
 ### Requirements
 
 - `git` for git-aware diffing and external repository resolution
-- `helm` for Helm chart registry/cache behavior while rendering `HelmRelease` resources
+- Install the three executables together. Defaults resolve plugins beside the host executable, then on `PATH`. `--flux-plugin` and `--crossplane-plugin` select trusted executable overrides; repository configuration cannot select commands.
+- Helm rendering uses the SDK in the Flux plugin; a standalone `helm` executable is not required. Unset Helm settings use the plugin's environment defaults.
+- Release archives `gitops-preview-toolkit_<tag>_<os>_<arch>.tar.gz` contain the core, both plugins, and `fmp`. Compatibility `fmp_<tag>_<os>_<arch>.tar.gz` archives include `fmp` and both plugins. The GitHub Action downloads and caches the complete toolkit.
+
+### Configuration and Crossplane
+
+The host discovers `.gitops-preview.yaml` (or `.gitops-preview.yml`) first, then legacy `.fmp.yaml`, `.fmp.yml`, or `.github/fmp.yaml`. `--config` and the existing Action `config` input select an explicit file. A minimal configuration is:
+
+```yaml
+paths: [clusters/production]
+helm: true
+sort: true
+crossplane:
+  enabled: true
+  timeout: 1m
+  max-functions: 32
+```
+
+`crossplane.enabled` records repository intent; it never grants execution. Enable Crossplane explicitly from a trusted invocation with `--crossplane` (or Action input `crossplane: true`). Neither executable paths nor development endpoints are read from repository configuration or resource annotations.
+
+```bash
+gitops-preview render . -k clusters/production --crossplane \
+  --crossplane-engine /opt/crossplane-v2.4.2/crossplane
+
+# Repeatable trusted overrides for individual Function names:
+gitops-preview diff main --crossplane \
+  --crossplane-function function-go-templating=127.0.0.1:9443 \
+  --crossplane-function function-auto-ready=127.0.0.1:9444
+```
+
+Crossplane rendering defaults to the **Docker** function runtime and requires access to Docker. Install the external **Crossplane controller binary v2.4.2**, not the user-facing Crossplane CLI; the default executable name is `crossplane-core` on `PATH`, or select its path with `--crossplane-engine`. The plugin checks its version before execution. For Linux/amd64, the controller artifact is [crossplane v2.4.2](https://releases.crossplane.io/stable/v2.4.2/bin/linux_amd64/crossplane). The engine is not included in toolkit archives or `Dockerfile.action`. That image installs the host and both sibling plugins; Crossplane use additionally requires the engine and Docker runtime access.
+
+Install the pinned engine locally, checking its published SHA-256 before executing it (Linux/amd64):
+
+```bash
+(
+set -euo pipefail
+engine_dir=$(mktemp -d)
+trap 'rm -rf "$engine_dir"' EXIT
+url=https://releases.crossplane.io/stable/v2.4.2/bin/linux_amd64/crossplane
+curl -fL "$url" -o "$engine_dir/crossplane"
+curl -fL "$url.sha256" -o "$engine_dir/crossplane.sha256"
+expected=$(tr -d '[:space:]' < "$engine_dir/crossplane.sha256")
+printf '%s  %s\n' "$expected" "$engine_dir/crossplane" | sha256sum --check --status
+chmod +x "$engine_dir/crossplane"
+test "$("$engine_dir/crossplane" --version)" = v2.4.2
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "$engine_dir/crossplane" "$HOME/.local/bin/crossplane-core"
+)
+```
+
+Put `$HOME/.local/bin` on `PATH`, or pass `--crossplane-engine "$HOME/.local/bin/crossplane-core"`. The toolkit never downloads an engine implicitly. Engine and plugin executable selection and development endpoints are trusted invocation settings, not fields that a checked-out repository can grant.
+
+Function definitions are automatically derived from rendered `Function` resources and composition references. Their names select trusted per-function development overrides. Unnamed composed resources use **Logical Resource Identity**: a stable parent/composition output key for matching and reports, not a generated live Kubernetes name. Composite status and readiness are **Evaluation Evidence**, separate from desired resources.
+
+Preview performs bounded desired-state discovery, not arbitrary cyclic controller reconciliation. Offline rendering needs locally available sources/charts, cached function images or explicitly reachable development targets, and the external engine. Local-only agent mode restricts remote acquisition; it is not an OS sandbox and does not grant Crossplane execution.
+
+Agent and MCP commands accept the same startup `--flux-plugin`, `--crossplane`, `--crossplane-plugin`, `--crossplane-engine` and repeatable `--crossplane-function` flags. Crossplane additionally requires `--trusted` because composition functions cannot run within local-only policy. Agent/MCP runtime configuration comes exclusively from startup flags: repository Crossplane settings and JSON operation requests cannot choose executables or grant development endpoints.
+
+```bash
+gitops-preview agent --root . --trusted --crossplane \
+  --crossplane-engine "$HOME/.local/bin/crossplane-core" \
+  --crossplane-function function-go-templating=127.0.0.1:9443 <<'JSON'
+{"operation":"render","paths":["clusters/production"]}
+JSON
+
+gitops-preview mcp --root . --trusted --crossplane \
+  --crossplane-engine "$HOME/.local/bin/crossplane-core"
+```
+
+CI runs transport/plugin-host integration tests with race detection, plus `tests/plugins/run-live.sh` on Linux with Go 1.26. The live chain downloads and checksum-checks the pinned controller, starts the real upstream function in Development mode, and exercises both plugins without Docker.
 
 ---
 
@@ -108,7 +201,7 @@ fmp diff
 
 By default, this compares rendered manifests from `HEAD` with your current worktree, so you can review the cluster impact of uncommitted local changes.
 
-Configure `paths` or cluster roots in `.fmp.yaml`, or supply `-k/--path` (for example, `fmp diff -k clusters/production`). A repository argument selects the source directory; it does not implicitly select `.` as a render root. Missing render roots are an error.
+Configure `paths` or cluster roots in `.gitops-preview.yaml` (legacy `.fmp.yaml` also works), or supply `-k/--path` (for example, `gitops-preview diff -k clusters/production`). A repository argument selects the source directory; it does not implicitly select `.` as a render root. Missing render roots are an error.
 
 Common examples:
 
@@ -146,7 +239,7 @@ fmp detect-permadiffs <path>  # suggest filters for noisy fields
 
 ## Configuration
 
-`fmp` auto-discovers `.fmp.yaml`, `.fmp.yml`, or `.github/fmp.yaml`.
+Both entry points auto-discover `.gitops-preview.yaml` or `.gitops-preview.yml`, then `.fmp.yaml`, `.fmp.yml`, or `.github/fmp.yaml` for compatibility.
 
 Minimal config:
 
@@ -283,14 +376,14 @@ AI classifications participate in the same `policies.labels` and `policies.fail-
 
 ## GitHub Action
 
-Use the action to review Flux pull requests automatically.
+Use the action to review GitOps pull requests automatically. The release-tagged Action downloads the matching binary bundle:
 
 ```yaml
 - uses: actions/checkout@v6
   with:
     fetch-depth: 0 # required for git-aware diffing
 
-- uses: tobiash/flux-manifest-preview@vX.Y.Z
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
   with:
     repo: .
     base-ref: origin/main
@@ -305,7 +398,7 @@ Use the action to review Flux pull requests automatically.
 ### Rich HTML report artifact
 
 ```yaml
-- uses: tobiash/flux-manifest-preview@vX.Y.Z
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
   with:
     repo: .
     base-ref: origin/main
@@ -321,7 +414,7 @@ The action uploads the report as an artifact and exposes:
 ### Deploy report to GitHub Pages
 
 ```yaml
-- uses: tobiash/flux-manifest-preview@vX.Y.Z
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
   with:
     repo: .
     base-ref: origin/main
@@ -333,7 +426,7 @@ This publishes reports to the `gh-pages` branch. When Pages is not enabled, the 
 
 ### Export rendered manifests
 
-The action's `export-dir` and `export-changed-only` inputs are reserved; manifest export is not implemented yet. Use `fmp render` for direct manifest output instead.
+The action's `export-dir` input exports the retained target manifests, including unnamed Crossplane outputs. Set `export-changed-only: true` to export only added or modified target resources. The destination must be absent or empty; filenames are deterministic and cluster-scoped. Use `gitops-preview render` for direct manifest output.
 
 ### Important inputs
 
@@ -388,6 +481,33 @@ The action's `export-dir` and `export-changed-only` inputs are reserved; manifes
 ---
 
 ## Structured output and exit codes
+
+### Agent CLI and MCP
+
+The versioned agent interface adds local stdio MCP tools and a JSON CLI over the
+same operation service:
+
+```sh
+fmp agent schema
+fmp agent discover --root /absolute/path/to/gitops
+fmp agent --root /absolute/path/to/gitops < request.json
+fmp mcp --root /absolute/path/to/gitops
+```
+
+It supports discovery, rendering, preview, bounded queries, redacted inspection,
+snapshot comparison, deterministic checks, and explicit handle release. MCP
+retains results between calls; CLI batches reuse results within one invocation.
+Existing CLI output formats are unchanged.
+
+Local-only rendering is the default. Trusted access is a startup option, never a
+tool argument. Both agent profiles reject known unsupported rendering inputs;
+there are no apply, publish, decryption, or nested-AI tools. Artifact limits and
+cooperative timeouts are not an OS sandbox or a process memory quota.
+
+See the [agent workflow and contract](docs/agent-workflow.md) and the portable
+[OpenCode/Claude Code skill](https://github.com/tobiash/gitops-preview-skill).
+
+### Legacy command output
 
 `render`, `diff`, `test`, and `get ks/hr` support `--output json`:
 
@@ -466,4 +586,4 @@ go test ./...
 go vet ./...
 ```
 
-For local action development or branch testing, build `fmp` ahead of time and pass it to the action with the `binary` input.
+For local action development or branch testing, build `gitops-preview` (or `fmp`) and both sibling plugins into one directory, then pass the host path to the action with the `binary` input.

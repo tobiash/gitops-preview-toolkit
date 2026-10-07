@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 )
 
 // PathKeyFunc returns the stable identity used to deduplicate discovered paths.
@@ -38,13 +38,20 @@ func (r DiscoveryRunner) Run(ctx context.Context, resources *render.Render, init
 	visited := make(map[string]struct{})
 	result := &ExpandResult{}
 	var deferredErrors []error
+	newResources := false
 
-	for iteration := 0; len(queue) > 0; iteration++ {
+	for iteration := 0; len(queue) > 0 || newResources; iteration++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if iteration > maxIterations {
 			return nil, fmt.Errorf("expansion loop exceeded %d iterations, possible cycle", maxIterations)
 		}
 
 		for _, path := range queue {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			key := r.pathKey(path)
 			if _, ok := visited[key]; ok {
 				continue
@@ -57,6 +64,7 @@ func (r DiscoveryRunner) Run(ctx context.Context, resources *render.Render, init
 		}
 
 		queue = nil
+		newResources = false
 		if r.Expanders == nil {
 			continue
 		}
@@ -68,9 +76,13 @@ func (r DiscoveryRunner) Run(ctx context.Context, resources *render.Render, init
 		result.Errors = append(result.Errors, expanded.Errors...)
 		deferredErrors = expanded.DeferredErrors
 		if expanded.Resources != nil {
+			before := resources.Size()
 			if err := resources.AbsorbAll(expanded.Resources); err != nil {
 				return nil, fmt.Errorf("failed to absorb expanded resources: %w", err)
 			}
+			// Newly generated Flux objects and value sources must reach every
+			// expander. Only new identities count as progress, not metadata churn.
+			newResources = resources.Size() > before
 		}
 		for _, path := range expanded.DiscoveredPaths {
 			if _, ok := visited[r.pathKey(path)]; !ok {
