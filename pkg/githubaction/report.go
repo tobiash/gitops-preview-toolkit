@@ -3,9 +3,9 @@ package githubaction
 import (
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/ai"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/ai"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 // Status values for ActionReport.

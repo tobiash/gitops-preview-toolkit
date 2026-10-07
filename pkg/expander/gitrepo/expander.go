@@ -11,14 +11,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	fluxgit "github.com/fluxcd/pkg/git"
 	fluxgogit "github.com/fluxcd/pkg/git/gogit"
 	gitrepository "github.com/fluxcd/pkg/git/repository"
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/sourcealiases"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kustomize/kyaml/filesys"
@@ -56,7 +56,7 @@ type cloneCache struct {
 	paths map[string]string // acquisition digest (URL and full CloneConfig) -> local path
 }
 
-const sourceRepoURLsFile = ".fmp-source-repo-urls"
+const sourceRepoURLsFile = sourcealiases.FileName
 
 var gitCloneFunc = gitClone
 
@@ -69,27 +69,16 @@ var newCloneClient = func(dest string, authOpts *fluxgit.AuthOptions) (cloneClie
 	)
 }
 
-// WriteSourceRepoURLs writes normalized source-repo aliases for a materialized tree.
+// WriteSourceRepoURLs writes source-repo aliases for a materialized tree.
 // This lets archived git revision snapshots resolve self-referential GitRepository URLs.
 func WriteSourceRepoURLs(path, repoRoot string) error {
-	return WriteSourceRepoURLsContext(context.Background(), path, repoRoot)
+	return sourcealiases.WriteSourceRepoURLs(path, repoRoot)
 }
 
 // WriteSourceRepoURLsContext writes source aliases while honoring cancellation
 // during Git discovery. Like WriteSourceRepoURLs, non-Git paths have no aliases.
 func WriteSourceRepoURLsContext(ctx context.Context, path, repoRoot string) error {
-	urls, err := gitRemoteURLs(ctx, repoRoot)
-	if err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if len(urls) == 0 {
-		return nil
-	}
-	data := strings.Join(urls, "\n") + "\n"
-	return os.WriteFile(filepath.Join(path, sourceRepoURLsFile), []byte(data), 0o644)
+	return sourcealiases.WriteSourceRepoURLsContext(ctx, path, repoRoot)
 }
 
 // NewExpander creates a GitRepository expander.
@@ -501,90 +490,14 @@ func stripFilePrefix(url string) string {
 }
 
 func discoverSourceRepoURLs(path string) map[string]struct{} {
-	urls := make(map[string]struct{})
-	remotes, _ := gitRemoteURLs(context.Background(), path)
-	for _, raw := range append(readSourceRepoURLsFile(path), remotes...) {
-		normalized, ok := normalizeGitURL(raw)
-		if ok {
-			urls[normalized] = struct{}{}
-		}
-	}
-	return urls
+	aliases, _ := sourcealiases.Discover(context.Background(), path)
+	return aliases
 }
 
 func readSourceRepoURLsFile(path string) []string {
-	data, err := os.ReadFile(filepath.Join(path, sourceRepoURLsFile))
-	if err != nil {
-		return nil
-	}
-	lines := strings.Split(string(data), "\n")
-	urls := make([]string, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		urls = append(urls, line)
-	}
-	return urls
-}
-
-func gitRemoteURLs(ctx context.Context, path string) ([]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, "git", "-C", path, "remote")
-	// A descendant can retain stdout/stderr after cancellation kills Git.
-	// Bound pipe draining too so callers can release their operation gate.
-	cmd.WaitDelay = 100 * time.Millisecond
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, ctx.Err()
-	}
-	var urls []string
-	for _, remote := range strings.Fields(string(out)) {
-		cmd := exec.CommandContext(ctx, "git", "-C", path, "remote", "get-url", "--all", remote)
-		cmd.WaitDelay = 100 * time.Millisecond
-		remoteOut, err := cmd.Output()
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			continue
-		}
-		urls = append(urls, strings.Fields(string(remoteOut))...)
-	}
-	return urls, ctx.Err()
+	return sourcealiases.Read(path)
 }
 
 func normalizeGitURL(raw string) (string, bool) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || isLocalURL(trimmed) {
-		return "", false
-	}
-	if strings.Contains(trimmed, "://") {
-		u, err := url.Parse(trimmed)
-		if err != nil || u.Host == "" {
-			return "", false
-		}
-		host := strings.ToLower(u.Hostname())
-		path := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
-		if path == "" {
-			return "", false
-		}
-		return host + "/" + path, true
-	}
-	if at := strings.Index(trimmed, "@"); at >= 0 {
-		trimmed = trimmed[at+1:]
-	}
-	parts := strings.SplitN(trimmed, ":", 2)
-	if len(parts) != 2 {
-		return "", false
-	}
-	host := strings.ToLower(strings.TrimSpace(parts[0]))
-	path := strings.TrimSuffix(strings.Trim(strings.TrimSpace(parts[1]), "/"), ".git")
-	if host == "" || path == "" {
-		return "", false
-	}
-	return host + "/" + path, true
+	return sourcealiases.NormalizeGitURL(raw)
 }

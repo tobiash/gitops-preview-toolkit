@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	helmcli "helm.sh/helm/v4/pkg/cli"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
 )
 
 func TestLocalSnapshotHelmSources(t *testing.T) {
@@ -17,7 +17,7 @@ func TestLocalSnapshotHelmSources(t *testing.T) {
 			root := t.TempDir()
 			writePreviewFile(t, root, ".fmp-source-repo-urls", "https://example.invalid/self.git\n")
 			writeLocalHelmSource(t, root, url, "chart", "  postRenderers:\n  - kustomize:\n      patches:\n      - patch: |\n          apiVersion: v1\n          kind: ConfigMap\n          metadata:\n            name: app\n          data:\n            value: patched\n")
-			p, err := New(WithLocalOnly(), WithPaths([]string{"root"}, false), WithHelm(helmcli.New()), WithFluxKS())
+			p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"root"}, false), WithHelm(&config.HelmSettings{}), WithFluxKS())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -42,7 +42,7 @@ func TestLocalSnapshotRejectsAcquisitionAndEscape(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			writeLocalHelmSource(t, root, tc.url, tc.chart, tc.extra)
-			p, err := New(WithLocalOnly(), WithPaths([]string{"root"}, false), WithHelm(helmcli.New()))
+			p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"root"}, false), WithHelm(&config.HelmSettings{}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -91,7 +91,7 @@ func TestLocalRootAndConfigSymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
 		t.Fatal(err)
 	}
-	p, err := New(WithLocalOnly(), WithPaths([]string{"escape"}, false))
+	p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"escape"}, false))
 	if err != nil {
 		t.Fatal(err)
 	}

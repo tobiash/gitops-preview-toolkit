@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	helmcli "helm.sh/helm/v4/pkg/cli"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
 )
 
 func TestSnapshotExpandsHelmGeneratedFlux(t *testing.T) {
@@ -41,7 +41,7 @@ spec:
 			writePreviewFile(t, root, "child/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: from-child-ks}\n")
 			writePreviewFile(t, root, "child-chart/Chart.yaml", "apiVersion: v2\nname: child\nversion: 0.1.0\n")
 			writePreviewFile(t, root, "child-chart/templates/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: from-child-hr}\n")
-			p, err := New(WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(helmcli.New()))
+			p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(&config.HelmSettings{}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +88,7 @@ spec:
       sourceRef: {kind: GitRepository, name: late-source}
 `)
 	writePreviewFile(t, root, "sources/repo.yaml", "apiVersion: source.toolkit.fluxcd.io/v1\nkind: GitRepository\nmetadata: {name: late-source, namespace: default}\nspec: {url: '.'}\n")
-	p, err := New(WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(helmcli.New()))
+	p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(&config.HelmSettings{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestLocalSnapshotUnsupportedFluxInputs(t *testing.T) {
 				writePreviewFile(t, root, "root/ks.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata: {name: child, namespace: default}\nspec:\n  path: child\n  sourceRef: {kind: GitRepository, name: local}\n"+tc.spec)
 				writePreviewFile(t, root, "child/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: child}\ndata: {value: '${REQUIRED}'}\n")
 			}
-			p, err := New(WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(helmcli.New()))
+			p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(&config.HelmSettings{}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -139,7 +139,7 @@ func TestLocalSnapshotUnsupportedFluxInputs(t *testing.T) {
 			if err == nil || snapshot.Complete || !strings.Contains(err.Error(), "unsupported") {
 				t.Fatalf("RenderSnapshot(%s) = %#v, %v, want explicit unsupported error", tc.name, snapshot, err)
 			}
-			trusted, err := New(WithGitRepo(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(helmcli.New()))
+			trusted, err := newTestPreview(t, WithGitRepo(), WithPaths([]string{"root"}, false), WithFluxKS(), WithHelm(&config.HelmSettings{}))
 			if err != nil {
 				t.Fatal(err)
 			}

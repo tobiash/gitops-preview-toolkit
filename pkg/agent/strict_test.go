@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
-	helmcli "helm.sh/helm/v4/pkg/cli"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
 )
 
 func TestEscapedRequestTooLargePreservesOperation(t *testing.T) {
@@ -69,7 +69,7 @@ func TestAgentStrictInputsInBothProfiles(t *testing.T) {
 				}
 			}
 			// Strictness is an agent requirement, not a change to the legacy API.
-			p, err := preview.New(preview.WithLogger(logr.Discard()), preview.WithPaths([]string{"manifests"}, false), preview.WithGitRepo(), preview.WithFluxKS(), preview.WithHelm(helmcli.New()))
+			p, err := preview.New(preview.WithLogger(logr.Discard()), preview.WithPaths([]string{"manifests"}, false), preview.WithGitRepo(), preview.WithFluxKS(), preview.WithHelm(&config.HelmSettings{}))
 			if err != nil {
 				t.Fatal(err)
 			}

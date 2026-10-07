@@ -14,7 +14,7 @@ func TestTest_Success(t *testing.T) {
 		WithLogger(logr.Discard()),
 		WithPaths([]string{"simple"}, false),
 	}
-	p, err := New(opts...)
+	p, err := newTestPreview(t, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -34,7 +34,7 @@ func TestTest_Failure(t *testing.T) {
 		WithLogger(logr.Discard()),
 		WithPaths([]string{"broken"}, false),
 	}
-	p, err := New(opts...)
+	p, err := newTestPreview(t, opts...)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -44,8 +44,8 @@ func TestTest_Failure(t *testing.T) {
 	if err := p.Test(context.Background(), testdata, &buf); err == nil {
 		t.Fatal("expected error from Test() with broken kustomization")
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("FAIL:")) {
-		t.Errorf("expected output to contain 'FAIL:', got %q", buf.String())
+	if !bytes.Contains(buf.Bytes(), []byte("FAIL")) {
+		t.Errorf("expected output to contain 'FAIL', got %q", buf.String())
 	}
 }
 

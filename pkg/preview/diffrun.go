@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/ai"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/ai"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 // DiffRunOptions describes one complete rendered manifest diff run.

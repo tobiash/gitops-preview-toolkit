@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 )
 
 // PathKeyFunc returns the stable identity used to deduplicate discovered paths.

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	gitrepoexpander "github.com/tobiash/flux-manifest-preview/pkg/expander/gitrepo"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/sourcealiases"
 )
 
 // Kind describes how a diff source should be resolved.
@@ -333,7 +333,7 @@ func materializeRevision(ctx context.Context, repoRoot, rev string) (string, fun
 		cleanup()
 		return "", nil, fmt.Errorf("git archive %s: %s: %w", rev, strings.TrimSpace(stderr.String()), err)
 	}
-	if err := gitrepoexpander.WriteSourceRepoURLsContext(ctx, tmpDir, repoRoot); err != nil {
+	if err := sourcealiases.WriteSourceRepoURLsContext(ctx, tmpDir, repoRoot); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("writing source repo metadata for %s: %w", rev, err)
 	}

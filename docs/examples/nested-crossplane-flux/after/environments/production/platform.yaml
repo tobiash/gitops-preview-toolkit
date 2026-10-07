@@ -1,0 +1,18 @@
+apiVersion: platform.example.org/v1alpha1
+kind: XPlatform
+metadata:
+  name: checkout
+  namespace: apps
+spec:
+  config:
+    environment: production
+    image: nginx:1.28.0
+    replicas: 4
+    size: medium
+    dbInstanceClass: db.t3.medium
+    storage: 40
+    cacheGiB: 2
+    expose: true
+    host: checkout.example.test
+    logs: true
+    debug: false

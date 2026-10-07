@@ -13,11 +13,10 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diffsource"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander/gitrepo"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
-	helmcli "helm.sh/helm/v4/pkg/cli"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diffsource"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/sourcealiases"
 )
 
 var errInput = errors.New("invalid input")
@@ -203,7 +202,7 @@ func (s *Service) capture(ctx context.Context, source string) (captured string, 
 	if err != nil {
 		return "", nil, err
 	}
-	if err := gitrepo.WriteSourceRepoURLsContext(ctx, dest, s.root); err != nil {
+	if err := sourcealiases.WriteSourceRepoURLsContext(ctx, dest, s.root); err != nil {
 		return "", nil, err
 	}
 	keep = true
@@ -264,6 +263,9 @@ func configDiagnostics(cfg *config.Config) []Diagnostic {
 	if cfg.HelmSettings != nil {
 		diagnostics = append(diagnostics, Diagnostic{"HelmSettingsIgnored", "config", "warning", "Repository credential and cache paths are ignored; startup Helm defaults apply."})
 	}
+	if cfg.Crossplane != nil {
+		diagnostics = append(diagnostics, Diagnostic{"CrossplaneSettingsIgnored", "config", "info", "Crossplane execution is controlled by startup options; repository runtime configuration is ignored."})
+	}
 	return diagnostics
 }
 
@@ -273,6 +275,7 @@ func (s *Service) newPreview(cfg *config.Config, req Request) (*preview.Preview,
 		return nil, errInput
 	}
 	opts := []preview.Opt{preview.WithLogger(logr.Discard()), preview.WithPaths(paths, config.BoolOr(req.Recursive, config.BoolOr(cfg.Recursive, false))), preview.WithFluxKS(), preview.WithFilterConfig(&cfg.Filters), preview.WithStrictInputs()}
+	opts = append(opts, preview.WithPluginHost(s.host))
 	if config.BoolOr(cfg.Sort, false) {
 		opts = append(opts, preview.WithSort())
 	}
@@ -280,7 +283,7 @@ func (s *Service) newPreview(cfg *config.Config, req Request) (*preview.Preview,
 		opts = append(opts, preview.WithExcludeCRDs())
 	}
 	if config.BoolOr(cfg.Helm, true) {
-		opts = append(opts, preview.WithHelm(helmcli.New()))
+		opts = append(opts, preview.WithHelm(&config.HelmSettings{}))
 	}
 	if config.BoolOr(cfg.ResolveGit, false) {
 		opts = append(opts, preview.WithGitRepo())

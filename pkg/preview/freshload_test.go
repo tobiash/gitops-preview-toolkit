@@ -41,7 +41,7 @@ spec:
     name: podinfo
 `)
 
-	p, err := New(
+	p, err := newTestPreview(t,
 		WithLogger(logr.Discard()),
 		WithPaths([]string{"."}, false),
 		WithGitRepo(),
@@ -50,9 +50,7 @@ spec:
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if p.gitRepoExpander != nil {
-		defer p.gitRepoExpander.Cleanup()
-	}
+	t.Cleanup(func() { _ = p.Close() })
 
 	results, err := p.freshLoadRepo(context.Background(), mainRepo)
 	if err != nil {

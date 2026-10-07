@@ -2,27 +2,35 @@ package preview
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/go-logr/logr"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 )
 
 // Snapshot is a detached render inventory, keyed by cluster ("" for unclustered input).
 // Incomplete snapshots must not be used to infer additions or deletions.
 type Snapshot struct {
 	Clusters map[string]*render.Render
+	// Logical preserves unnamed composed resources without adding invented names
+	// to the named Kubernetes inventory.
+	Logical  map[string][]plugin.Resource
+	Evidence map[string][]json.RawMessage
 	Complete bool
 	Warnings []string
 }
 
-// RenderSnapshot freshly loads path and returns the exact inventory used for comparison.
+// RenderSnapshot loads path and returns the exact inventory used for comparison.
 // On failure the returned snapshot is incomplete and the error describes why.
 func (p *Preview) RenderSnapshot(ctx context.Context, path string) (*Snapshot, error) {
-	snapshot := &Snapshot{Clusters: make(map[string]*render.Render)}
-	results, err := p.freshLoadRepo(ctx, path)
+	snapshot := &Snapshot{Clusters: make(map[string]*render.Render), Logical: make(map[string][]plugin.Resource), Evidence: make(map[string][]json.RawMessage)}
+	results, err := p.loadRepo(ctx, path)
 	if err != nil {
 		snapshot.Warnings = []string{err.Error()}
 		return snapshot, err
@@ -37,6 +45,11 @@ func (p *Preview) RenderSnapshot(ctx context.Context, path string) (*Snapshot, e
 		}
 		p.applyOutputOptions(r.render)
 		snapshot.Clusters[cluster] = r.render
+		snapshot.Logical[cluster] = r.logical
+		snapshot.Evidence[cluster] = r.evidence
+		if _, err := diff.LogicalChangeSet(r.logical, r.logical); err != nil {
+			diagnostics.Errors = append(diagnostics.Errors, fmt.Errorf("cluster %q: %w", cluster, err))
+		}
 		for i, res := range r.render.Resources() {
 			if _, err := res.Map(); err != nil {
 				diagnostics.Errors = append(diagnostics.Errors, fmt.Errorf("cluster %q resource %d: invalid resource map: %w", cluster, i+1, err))
@@ -83,23 +96,68 @@ func compareSnapshots(ctx context.Context, before, after *Snapshot, out io.Write
 			}
 		}
 	}
-	var result *diff.DiffResult
-	var err error
-	if len(before.Clusters) == 1 && len(after.Clusters) == 1 && before.Clusters[""] != nil && after.Clusters[""] != nil {
-		result, err = diff.DiffWithResult(before.Clusters[""], after.Clusters[""], out)
-	} else {
-		result, err = diff.DiffWithResultClustered(before.Clusters, after.Clusters, out)
+	clusterSet := make(map[string]bool)
+	for _, snapshot := range []*Snapshot{before, after} {
+		for cluster := range snapshot.Clusters {
+			clusterSet[cluster] = true
+		}
+		for cluster := range snapshot.Logical {
+			clusterSet[cluster] = true
+		}
 	}
-	if err != nil {
-		return &diff.DiffResult{}, err
+	clusters := make([]string, 0, len(clusterSet))
+	for cluster := range clusterSet {
+		clusters = append(clusters, cluster)
+	}
+	sort.Strings(clusters)
+	result := &diff.DiffResult{}
+	if len(clusters) > 1 || (len(clusters) == 1 && clusters[0] != "") {
+		result.Clustered, result.Clusters = true, clusters
+	}
+	for _, cluster := range clusters {
+		if err := ctx.Err(); err != nil {
+			return &diff.DiffResult{}, err
+		}
+		left, right := before.Clusters[cluster], after.Clusters[cluster]
+		if left == nil {
+			left = render.NewDefaultRender(logr.Discard())
+		}
+		if right == nil {
+			right = render.NewDefaultRender(logr.Discard())
+		}
+		named, err := diff.ChangeSet(left, right)
+		if err != nil {
+			return &diff.DiffResult{}, err
+		}
+		logical, err := diff.LogicalChangeSet(before.Logical[cluster], after.Logical[cluster])
+		if err != nil {
+			return &diff.DiffResult{}, fmt.Errorf("cluster %q: %w", cluster, err)
+		}
+		for _, changes := range []*diff.DiffResult{named, logical} {
+			for i := range changes.Added {
+				changes.Added[i].Cluster = cluster
+			}
+			for i := range changes.Deleted {
+				changes.Deleted[i].Cluster = cluster
+			}
+			for i := range changes.Modified {
+				changes.Modified[i].Cluster = cluster
+			}
+			result.Added = append(result.Added, changes.Added...)
+			result.Deleted = append(result.Deleted, changes.Deleted...)
+			result.Modified = append(result.Modified, changes.Modified...)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return &diff.DiffResult{}, err
 	}
+	result.Sort()
+	result.WriteUnified(out)
 	return result, nil
 }
 
 func (p *Preview) diffSnapshots(ctx context.Context, a, b string, out io.Writer) (*diff.DiffResult, *Snapshot, *Snapshot, error) {
+	defer p.beginRun()()
 	// Configured filters may carry mutable state, so load sequentially.
 	before, leftErr := p.RenderSnapshot(ctx, a)
 	if leftErr != nil {

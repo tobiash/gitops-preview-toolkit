@@ -1,0 +1,238 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: platform
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: XPlatform
+  mode: Pipeline
+  pipeline:
+    - step: application-and-config
+      functionRef:
+        name: templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $xr := .observed.composite.resource }}
+            apiVersion: platform.example.org/v1alpha1
+            kind: XApplication
+            metadata:
+              name: {{ $xr.metadata.name }}-app
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: application
+            spec:
+              config:
+            {{ toYaml $xr.spec.config | indent 4 }}
+            ---
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: {{ $xr.metadata.name }}-app-config
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: app-config
+            spec:
+              interval: 1m
+              path: ./app-config
+              prune: true
+              targetNamespace: {{ $xr.metadata.namespace }}
+              sourceRef:
+                kind: GitRepository
+                name: example-repo
+                namespace: flux-system
+              postBuild:
+                substitute:
+                  APP_NAME: {{ printf "%s-app" $xr.metadata.name | quote }}
+                  APP_REPLICAS: {{ $xr.spec.config.replicas | quote }}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: application
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: XApplication
+  mode: Pipeline
+  pipeline:
+    - step: chart-and-database
+      functionRef:
+        name: templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $xr := .observed.composite.resource }}
+            {{ $cfg := $xr.spec.config }}
+            apiVersion: helm.toolkit.fluxcd.io/v2
+            kind: HelmRelease
+            metadata:
+              name: {{ $xr.metadata.name }}
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: chart
+            spec:
+              interval: 1m
+              releaseName: {{ $xr.metadata.name }}
+              chart:
+                spec:
+                  chart: ./charts/checkout
+                  reconcileStrategy: Revision
+                  sourceRef:
+                    kind: GitRepository
+                    name: example-repo
+                    namespace: flux-system
+              valuesFrom:
+                - kind: ConfigMap
+                  name: {{ $xr.metadata.name }}-values
+                  valuesKey: values.yaml
+              values:
+                image: {{ $cfg.image | quote }}
+                environment: {{ $cfg.environment | quote }}
+                size: {{ $cfg.size | quote }}
+                expose: {{ $cfg.expose }}
+                host: {{ $cfg.host | quote }}
+                cacheGiB: {{ $cfg.cacheGiB }}
+                debug: {{ $cfg.debug }}
+            ---
+            apiVersion: platform.example.org/v1alpha1
+            kind: XDatabase
+            metadata:
+              name: {{ $xr.metadata.name }}-db
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database
+            spec:
+              config:
+                environment: {{ $cfg.environment | quote }}
+                dbInstanceClass: {{ $cfg.dbInstanceClass | quote }}
+                storage: {{ $cfg.storage }}
+                logs: {{ $cfg.logs }}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: database
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: XDatabase
+  mode: Pipeline
+  pipeline:
+    - step: desired-infrastructure
+      functionRef:
+        name: templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $xr := .observed.composite.resource }}
+            {{ $cfg := $xr.spec.config }}
+            apiVersion: rds.aws.m.upbound.io/v1beta1
+            kind: Instance
+            metadata:
+              name: {{ $xr.metadata.name }}
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: rds
+            spec:
+              providerConfigRef:
+                kind: ProviderConfig
+                name: default
+              forProvider:
+                region: us-east-1
+                engine: postgres
+                engineVersion: "16.6"
+                instanceClass: {{ $cfg.dbInstanceClass | quote }}
+                allocatedStorage: {{ $cfg.storage }}
+                storageType: gp3
+                storageEncrypted: true
+                username: preview_admin
+                manageMasterUserPassword: true
+                publiclyAccessible: false
+                skipFinalSnapshot: true
+                tags:
+                  Environment: {{ $cfg.environment | quote }}
+            {{ if $cfg.logs }}
+            ---
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: Bucket
+            metadata:
+              name: {{ $xr.metadata.name }}-logs
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: logs
+            spec:
+              providerConfigRef:
+                kind: ProviderConfig
+                name: default
+              forProvider:
+                region: us-east-1
+                tags:
+                  Environment: {{ $cfg.environment | quote }}
+                  Purpose: application-logs
+            {{ end }}
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: cache
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: XCache
+  mode: Pipeline
+  pipeline:
+    - step: cache-settings
+      functionRef:
+        name: templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{ $xr := .observed.composite.resource }}
+            {{ $cfg := $xr.spec.config }}
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: {{ $xr.metadata.name }}-settings
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: settings
+            data:
+              capacityGiB: {{ $cfg.cacheGiB | quote }}
+              environment: {{ $cfg.environment | quote }}
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              generateName: {{ $xr.metadata.name }}-policy-
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: policy
+            data:
+              eviction: allkeys-lru
+              maxMemoryMiB: {{ mul $cfg.cacheGiB 1024 | quote }}
+            {{ if $cfg.debug }}
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: {{ $xr.metadata.name }}-debug
+              namespace: {{ $xr.metadata.namespace }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: debug
+            data:
+              logLevel: debug
+            {{ end }}

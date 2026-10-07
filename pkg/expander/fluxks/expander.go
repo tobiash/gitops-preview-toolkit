@@ -8,8 +8,8 @@ import (
 
 	fluxksv1 "github.com/fluxcd/kustomize-controller/api/v1"
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/kustomize/api/resource"
 	"sigs.k8s.io/kustomize/kyaml/resid"

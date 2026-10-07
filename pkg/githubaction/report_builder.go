@@ -1,9 +1,9 @@
 package githubaction
 
 import (
-	"github.com/tobiash/flux-manifest-preview/pkg/ai"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/ai"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 // ReportInput contains the domain data needed to assemble an impact report.

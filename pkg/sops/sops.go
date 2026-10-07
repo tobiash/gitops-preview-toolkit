@@ -22,6 +22,12 @@ func IsSOPSContainer(m map[string]any) bool {
 
 var decryptFunc = decryptYAML
 
+// DecryptDocument decrypts YAML without requiring an API-server-assigned name.
+// The caller validates the decrypted document before publishing its inventory.
+func DecryptDocument(data []byte) ([]byte, error) {
+	return decryptFunc(data)
+}
+
 func DecryptResources(rm resmap.ResMap) error {
 	for _, res := range rm.Resources() {
 		if res.GetKind() != SecretGVK {

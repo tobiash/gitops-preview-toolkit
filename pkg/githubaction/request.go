@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
 )
 
 // Request captures normalized inputs for the GitHub Action mode.
@@ -24,19 +24,24 @@ type Request struct {
 	ClusterPaths map[string][]string
 
 	// Render options
-	Recursive        bool
-	RenderHelm       bool
-	ResolveGit       bool
-	Sort             bool
-	ExcludeCRDs      bool
-	SOPSDecrypt      bool
-	HelmRelease      string
-	ConfigFile       string
-	FilterFile       string
-	FilterYAML       string
-	RegistryConfig   string
-	RepositoryConfig string
-	RepositoryCache  string
+	Recursive           bool
+	RenderHelm          bool
+	ResolveGit          bool
+	Sort                bool
+	ExcludeCRDs         bool
+	SOPSDecrypt         bool
+	HelmRelease         string
+	ConfigFile          string
+	FilterFile          string
+	FilterYAML          string
+	RegistryConfig      string
+	RepositoryConfig    string
+	RepositoryCache     string
+	Crossplane          bool
+	CrossplaneEngine    string
+	CrossplaneFunctions []string
+	FluxPlugin          string
+	CrossplanePlugin    string
 
 	// Export
 	ExportDir         string
@@ -84,6 +89,11 @@ func ParseRequestFromEnv() (*Request, error) {
 		RegistryConfig:                 getInput("registry-config", ""),
 		RepositoryConfig:               getInput("repository-config", ""),
 		RepositoryCache:                getInput("repository-cache", ""),
+		Crossplane:                     parseBool(getInput("crossplane", "false")),
+		CrossplaneEngine:               getInput("crossplane-engine", ""),
+		CrossplaneFunctions:            parseLines(getInput("crossplane-function", "")),
+		FluxPlugin:                     getInput("flux-plugin", ""),
+		CrossplanePlugin:               getInput("crossplane-plugin", ""),
 		ExportDir:                      getInput("export-dir", ""),
 		ExportChangedOnly:              parseBool(getInput("export-changed-only", "false")),
 		WriteSummary:                   parseBool(getInput("write-summary", "true")),
@@ -187,7 +197,7 @@ func (r *Request) HasConfig() bool {
 	return r.ConfigFile != "" || config.DiscoverConfigPath(r.ConfigRoot()) != ""
 }
 
-// ConfigRoot returns the directory to search for .fmp.yaml.
+// ConfigRoot returns the directory to search for repository configuration.
 func (r *Request) ConfigRoot() string {
 	if r.ConfigFile != "" {
 		return ""

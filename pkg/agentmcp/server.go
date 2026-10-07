@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tobiash/flux-manifest-preview/pkg/agent"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/agent"
 )
 
 type discoverInput struct {

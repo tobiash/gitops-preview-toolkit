@@ -7,7 +7,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	k8qdiff "github.com/tobiash/k8q/pkg/diff"
 	"sigs.k8s.io/kustomize/kyaml/resid"
 	"sigs.k8s.io/kustomize/kyaml/yaml"

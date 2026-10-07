@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 )
 
 func TestClusteredJSONSnapshotsAndOrigins(t *testing.T) {

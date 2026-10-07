@@ -1,0 +1,8 @@
+image: nginx:1.27.4
+replicaCount: 1
+environment: staging
+size: small
+expose: false
+host: checkout.staging.example.test
+cacheGiB: 1
+debug: false

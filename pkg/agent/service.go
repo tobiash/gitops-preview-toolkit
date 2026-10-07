@@ -14,9 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/pluginhost"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,6 +31,7 @@ type Service struct {
 	root      string
 	workspace *os.Root
 	opts      Options
+	host      *pluginhost.Host
 	gate      chan struct{}
 	done      chan struct{}
 	mu        sync.Mutex
@@ -93,11 +96,38 @@ func New(root string, opts Options) (*Service, error) {
 	if err != nil || !info.IsDir() {
 		return nil, errors.New("workspace root must be a directory")
 	}
+	opts.PluginCommands = slices.Clone(opts.PluginCommands)
+	for i := range opts.PluginCommands {
+		opts.PluginCommands[i].Args = slices.Clone(opts.PluginCommands[i].Args)
+		opts.PluginCommands[i].Config = slices.Clone(opts.PluginCommands[i].Config)
+	}
+	opts.CrossplaneConfig = slices.Clone(opts.CrossplaneConfig)
+	commands := opts.PluginCommands
+	if len(commands) == 0 {
+		commands = []plugin.Command{{Name: "flux", Command: "gitops-preview-flux"}}
+	}
+	if opts.Crossplane {
+		commands = append(slices.Clone(commands), plugin.Command{
+			Name: "crossplane", Command: "gitops-preview-crossplane", Config: opts.CrossplaneConfig,
+		})
+	}
+	for _, command := range commands {
+		if command.Command == "" {
+			return nil, errInput
+		}
+	}
+	host, err := pluginhost.New(commands)
+	if err != nil {
+		return nil, errInput
+	}
 	workspace, err := os.OpenRoot(abs)
 	if err != nil {
-		return nil, errors.New("workspace root is inaccessible")
+		return nil, errors.Join(errors.New("workspace root is inaccessible"), host.Close())
 	}
-	return &Service{root: abs, workspace: workspace, opts: opts, gate: make(chan struct{}, 1), done: make(chan struct{}), entries: make(map[string]*cachedEntry)}, nil
+	return &Service{
+		root: abs, workspace: workspace, opts: opts, host: host,
+		gate: make(chan struct{}, 1), done: make(chan struct{}), entries: make(map[string]*cachedEntry),
+	}, nil
 }
 
 // Close cancels active work, waits for cleanup, and releases all retained facts.
@@ -113,11 +143,17 @@ func (s *Service) Close() error {
 	}
 	s.mu.Unlock()
 	s.gate <- struct{}{}
+	var err error
+	if s.host != nil {
+		err = s.host.Close()
+		s.host = nil
+	}
 	s.entries = make(map[string]*cachedEntry)
 	s.bytes = 0
-	var err error
+	s.opts.PluginCommands = nil
+	s.opts.CrossplaneConfig = nil
 	if s.workspace != nil {
-		err = s.workspace.Close()
+		err = errors.Join(err, s.workspace.Close())
 		s.workspace = nil
 	}
 	<-s.gate
@@ -311,6 +347,7 @@ func (s *Service) store(entries ...*entry) error {
 			if !e.snapshot.Complete {
 				return errInput
 			}
+			artifact.Evidence = e.snapshot.Evidence
 			for cluster := range e.snapshot.Clusters {
 				artifact.Clusters = append(artifact.Clusters, cluster)
 			}
@@ -478,7 +515,7 @@ func (s *Service) discover(req Request) Response {
 	// This root is read-only; closing it cannot invalidate captured data.
 	defer func() { _ = root.Close() }()
 	cfg := &config.Config{}
-	for _, path := range []string{".fmp.yaml", ".fmp.yml", ".github/fmp.yaml"} {
+	for _, path := range []string{".gitops-preview.yaml", ".gitops-preview.yml", ".fmp.yaml", ".fmp.yml", ".github/fmp.yaml"} {
 		info, err := root.Lstat(path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue

@@ -1,6 +1,17 @@
-# Flux Manifest Preview
+# GitOps Preview Toolkit
 
-Flux Manifest Preview explains the rendered Kubernetes resource impact of Flux GitOps changes before they reach a cluster.
+GitOps Preview Toolkit explains the rendered Kubernetes resource impact of supported GitOps changes before they reach a cluster. Its canonical repository and Go module are `github.com/tobiash/gitops-preview-toolkit`; `gitops-preview` is the primary executable and `fmp` is the compatibility executable.
+
+The toolkit implements this workflow through persistent local render
+plugins. A combined Flux/Git/Helm/path plugin and an optional Crossplane plugin
+produce desired resources; the host retains comparison, policy, AI Assessment,
+agent operations and report workflows.
+
+**Logical Resource Identity** identifies an unnamed composed output by its parent
+and stable composition output key. It is preview metadata, not a generated live
+Kubernetes name. **Evaluation Evidence**, including composite status and readiness,
+is separate from desired resource inventory. Rendering is bounded desired-state
+discovery, not arbitrary cyclic controller reconciliation.
 
 ## Language
 

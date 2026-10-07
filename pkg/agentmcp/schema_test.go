@@ -2,9 +2,11 @@ package agentmcp
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/agent"
 )
 
 func TestSchemaSemantics(t *testing.T) {
@@ -66,6 +68,36 @@ func TestSchemaSemantics(t *testing.T) {
 		if err := spec.outputResolved.Validate(output); err != nil {
 			t.Errorf("%s failure: %v", spec.operation, err)
 		}
+	}
+}
+
+func TestLogicalSummarySchemas(t *testing.T) {
+	for _, spec := range specifications() {
+		if spec.operation != "query" && spec.operation != "inspect" {
+			continue
+		}
+		t.Run(spec.operation, func(t *testing.T) {
+			data := spec.output.OneOf[0].Properties["data"]
+			summary := data
+			if spec.operation == "query" {
+				summary = data.Properties["items"].Items
+			}
+			if summary.Properties["logicalId"].Type != "string" || slices.Contains(summary.Required, "logicalId") {
+				t.Fatal("logicalId must be an optional string in generated summaries")
+			}
+			for _, logicalID := range []string{"", "logical:parent/slot"} {
+				resource := agent.ResourceSummary{ResourceID: "opaque", LogicalID: logicalID, Cluster: "east", APIVersion: "example.io/v1", Kind: "Bucket"}
+				var result any = agent.InspectData{ID: "snapshot", ResourceSummary: resource, New: map[string]any{"kind": "Bucket"}}
+				if spec.operation == "query" {
+					result = agent.QueryData{ID: "snapshot", Items: []agent.ResourceSummary{resource}, Total: 1}
+				}
+				response := agent.Response{SchemaVersion: "1", Operation: spec.operation, Status: "success", Complete: true, Data: result, Diagnostics: []agent.Diagnostic{}}
+				encoded, err := json.Marshal(response)
+				if err != nil || validateJSON(encoded, spec.outputResolved) != nil {
+					t.Fatalf("logical summary rejected by published SDK schema: %s, %v", encoded, err)
+				}
+			}
+		})
 	}
 }
 

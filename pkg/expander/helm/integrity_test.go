@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	helmcli "helm.sh/helm/v4/pkg/cli"
 )
 

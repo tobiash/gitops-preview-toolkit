@@ -1,0 +1,18 @@
+clusters:
+  staging: clusters/staging
+  production: clusters/production
+helm: true
+resolve-git: true
+sort: true
+exclude-crds: true
+crossplane:
+  enabled: true
+  timeout: 1m
+  max-functions: 32
+# Optional deterministic review classifications; remove policies to disable them.
+policies:
+  builtin: [image_update, replicas_change, ingress_change]
+  labels:
+    image_update: image-update
+    replicas_change: capacity-change
+    ingress_change: needs-network-review

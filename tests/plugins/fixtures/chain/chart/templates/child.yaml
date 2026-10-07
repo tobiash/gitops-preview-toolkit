@@ -1,0 +1,8 @@
+apiVersion: live.example.org/v1
+kind: App
+metadata:
+  name: leaf
+  namespace: workload
+spec:
+  stage: leaf
+  marker: {{ .Values.marker | quote }}

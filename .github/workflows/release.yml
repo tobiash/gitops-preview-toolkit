@@ -38,7 +38,7 @@ jobs:
           cp -r tests/action /tmp/repo-a
           cp -r tests/action /tmp/repo-b
           sed -i 's/color: blue/color: green/' /tmp/repo-b/apps/podinfo/configmap.yaml
-      - name: Run flux-manifest-preview release download path
+      - name: Run gitops-preview-toolkit release download path
         id: fmp
         uses: ./
         env:
@@ -51,6 +51,11 @@ jobs:
           helm: 'false'
       - name: Verify outputs
         run: |
+          for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+            command -v "$binary"
+          done
+          fmp version
+          gitops-preview version
           if [ "${{ steps.fmp.outputs.changed }}" != "true" ]; then
             echo "ERROR: expected changed=true"
             exit 1

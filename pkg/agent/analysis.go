@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"github.com/tobiash/k8q/pkg/engine"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
@@ -33,6 +33,9 @@ func origin(p *render.Provenance) *Origin {
 }
 
 func snapshotEntry(snapshot *preview.Snapshot, policies *config.PolicyConfig) (*entry, error) {
+	if snapshot == nil || !snapshot.Complete || snapshot.Clusters == nil {
+		return nil, errInput
+	}
 	e := &entry{snapshot: snapshot, policies: policies}
 	var clusters []string
 	for cluster := range snapshot.Clusters {
@@ -57,6 +60,23 @@ func snapshotEntry(snapshot *preview.Snapshot, policies *config.PolicyConfig) (*
 			e.records = append(e.records, record{Summary: ResourceSummary{ResourceID: opaqueID(), Cluster: cluster, APIVersion: res.GetApiVersion(), Kind: res.GetKind(), Name: res.GetName(), Namespace: res.GetNamespace(), Producer: p.String(), AfterOrigin: origin(&p)}, New: obj, YAML: string(data)})
 		}
 	}
+	for cluster, resources := range snapshot.Logical {
+		changes, err := diff.LogicalChangeSet(nil, resources)
+		if err != nil {
+			return nil, err
+		}
+		yamlByID := make(map[string]string, len(resources))
+		for _, res := range resources {
+			yamlByID[res.ID] = res.YAML
+		}
+		for _, change := range changes.Added {
+			change.Cluster = cluster
+			r := changeRecord(change)
+			r.Summary.Action = ""
+			r.YAML = yamlByID[change.LogicalID]
+			e.records = append(e.records, r)
+		}
+	}
 	sortRecords(e.records)
 	return e, nil
 }
@@ -64,19 +84,38 @@ func snapshotEntry(snapshot *preview.Snapshot, policies *config.PolicyConfig) (*
 func diffEntry(changes *diff.DiffResult, policies *config.PolicyConfig) *entry {
 	e := &entry{changes: changes, policies: policies}
 	for _, c := range changes.Changes() {
-		version := c.ID.Version
-		if c.ID.Group != "" {
-			version = c.ID.Group + "/" + version
-		}
-		e.records = append(e.records, record{Summary: ResourceSummary{opaqueID(), c.Cluster, version, c.Kind, c.Name, c.Namespace, c.Action, c.Producer, origin(c.BeforeOrigin), origin(c.AfterOrigin)}, Old: c.Old, New: c.New})
+		e.records = append(e.records, changeRecord(c))
 	}
 	sortRecords(e.records)
 	return e
 }
 
+func changeRecord(c diff.ResourceChange) record {
+	version := c.ID.Version
+	if c.ID.Group != "" {
+		version = c.ID.Group + "/" + version
+	}
+	return record{
+		Summary: ResourceSummary{
+			ResourceID: opaqueID(), LogicalID: c.LogicalID, Cluster: c.Cluster,
+			APIVersion: version, Kind: c.Kind, Name: c.Name, Namespace: c.Namespace,
+			Action: c.Action, Producer: c.Producer,
+			BeforeOrigin: origin(c.BeforeOrigin), AfterOrigin: origin(c.AfterOrigin),
+		},
+		Old: c.Old, New: c.New,
+	}
+}
+
 func sortRecords(records []record) {
 	slices.SortFunc(records, func(a, b record) int {
-		for _, pair := range [][2]string{{a.Summary.Cluster, b.Summary.Cluster}, {a.Summary.APIVersion, b.Summary.APIVersion}, {a.Summary.Kind, b.Summary.Kind}, {a.Summary.Namespace, b.Summary.Namespace}, {a.Summary.Name, b.Summary.Name}} {
+		for _, pair := range [][2]string{
+			{a.Summary.Cluster, b.Summary.Cluster},
+			{a.Summary.APIVersion, b.Summary.APIVersion},
+			{a.Summary.Kind, b.Summary.Kind},
+			{a.Summary.Namespace, b.Summary.Namespace},
+			{a.Summary.Name, b.Summary.Name},
+			{a.Summary.LogicalID, b.Summary.LogicalID},
+		} {
 			if c := strings.Compare(pair[0], pair[1]); c != 0 {
 				return c
 			}

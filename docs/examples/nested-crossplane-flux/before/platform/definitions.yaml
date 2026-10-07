@@ -1,0 +1,144 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xplatforms.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: XPlatform
+    plural: xplatforms
+  defaultCompositionRef:
+    name: platform
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [config]
+              properties:
+                config:
+                  type: object
+                  required: [environment, image, replicas, size, dbInstanceClass, storage, cacheGiB, expose, host, logs, debug]
+                  properties:
+                    environment: {type: string, enum: [staging, production]}
+                    image: {type: string}
+                    replicas: {type: integer, minimum: 1}
+                    size: {type: string, enum: [small, medium]}
+                    dbInstanceClass: {type: string}
+                    storage: {type: integer, minimum: 20}
+                    cacheGiB: {type: integer, minimum: 1}
+                    expose: {type: boolean}
+                    host: {type: string}
+                    logs: {type: boolean}
+                    debug: {type: boolean}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xapplications.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: XApplication
+    plural: xapplications
+  defaultCompositionRef:
+    name: application
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [config]
+              properties:
+                config:
+                  type: object
+                  required: [environment, image, replicas, size, dbInstanceClass, storage, cacheGiB, expose, host, logs, debug]
+                  properties:
+                    environment: {type: string, enum: [staging, production]}
+                    image: {type: string}
+                    replicas: {type: integer, minimum: 1}
+                    size: {type: string, enum: [small, medium]}
+                    dbInstanceClass: {type: string}
+                    storage: {type: integer, minimum: 20}
+                    cacheGiB: {type: integer, minimum: 1}
+                    expose: {type: boolean}
+                    host: {type: string}
+                    logs: {type: boolean}
+                    debug: {type: boolean}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xdatabases.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: XDatabase
+    plural: xdatabases
+  defaultCompositionRef:
+    name: database
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [config]
+              properties:
+                config:
+                  type: object
+                  required: [environment, dbInstanceClass, storage, logs]
+                  properties:
+                    environment: {type: string, enum: [staging, production]}
+                    dbInstanceClass: {type: string}
+                    storage: {type: integer, minimum: 20}
+                    logs: {type: boolean}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: xcaches.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: XCache
+    plural: xcaches
+  defaultCompositionRef:
+    name: cache
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [config]
+              properties:
+                config:
+                  type: object
+                  required: [environment, cacheGiB, debug]
+                  properties:
+                    environment: {type: string, enum: [staging, production]}
+                    cacheGiB: {type: integer, minimum: 1}
+                    debug: {type: boolean}

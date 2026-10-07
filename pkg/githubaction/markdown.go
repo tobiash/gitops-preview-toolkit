@@ -5,14 +5,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 // RenderSummaryMarkdown generates a GitHub Step Summary markdown document.
 func RenderSummaryMarkdown(req *Request, report *ActionReport) string {
 	var b strings.Builder
 
-	b.WriteString("## 🔄 Flux Manifest Preview\n\n")
+	b.WriteString("## 🔄 gitops-preview-toolkit\n\n")
 
 	statusEmoji := map[string]string{
 		StatusClean:   "✅",
@@ -58,7 +58,7 @@ func RenderSummaryMarkdown(req *Request, report *ActionReport) string {
 	}
 
 	if report.ExportDir != "" {
-		_, _ = fmt.Fprintf(&b, "### 📦 Export\n\nRendered manifests exported to `%s` (%d files).\n\n", report.ExportDir, report.ResourcesTotal)
+		_, _ = fmt.Fprintf(&b, "### 📦 Export\n\nRendered manifests exported to `%s`.\n\n", report.ExportDir)
 	}
 
 	return b.String()
@@ -79,7 +79,7 @@ func RenderCommentMarkdown(req *Request, report *ActionReport) string {
 		emoji = "❓"
 	}
 
-	_, _ = fmt.Fprintf(&b, "### %s Flux Manifest Preview\n\n", emoji)
+	_, _ = fmt.Fprintf(&b, "### %s gitops-preview-toolkit\n\n", emoji)
 
 	if len(report.Errors) > 0 {
 		b.WriteString("**Errors detected.**\n\n")

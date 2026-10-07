@@ -137403,8 +137403,8 @@ async function run() {
     const binaryPath = await resolveBinaryPath()
     maskAITokens()
 
-    await core.group('Run fmp github-action', async () => {
-      core.info(`Using fmp binary: ${binaryPath}`)
+    await core.group('Run gitops-preview-toolkit github-action', async () => {
+      core.info(`Using preview binary: ${binaryPath}`)
       try {
         exitCode = await lib_exec.exec(binaryPath, ['github-action'], {
           ignoreReturnCode: true
@@ -137430,7 +137430,7 @@ async function run() {
       throw execError
     }
     if (exitCode !== 0) {
-      throw new Error(`fmp github-action failed with exit code ${exitCode}`)
+      throw new Error(`gitops-preview-toolkit github-action failed with exit code ${exitCode}`)
     }
   } catch (err) {
     core.setFailed(err instanceof Error ? err.message : String(err))
@@ -137553,20 +137553,21 @@ async function resolveBinaryPath() {
 
   const version = resolveActionVersion()
   if (!/^v.+/.test(version)) {
-    throw new Error('This action no longer builds fmp from source. For non-release refs, provide `with: binary:`.')
+    throw new Error('This action does not build the toolkit from source. For non-release refs, provide `with: binary:` and install sibling plugins.')
   }
 
   const toolArch = process.arch
-  const cachedDir = tool_cache.find('fmp', version, toolArch)
+  const cachedDir = tool_cache.find('gitops-preview-toolkit', version, toolArch)
   if (cachedDir !== '') {
-    return ensureBinary(external_path_.join(cachedDir, binaryName()))
+    return ensureToolkit(cachedDir)
   }
 
-  return core.group(`Download fmp ${version}`, async () => {
+  return core.group(`Download gitops-preview-toolkit ${version}`, async () => {
     const archivePath = await tool_cache.downloadTool(releaseURL(version))
     const extractedDir = await tool_cache.extractTar(archivePath)
-    const installedDir = await tool_cache.cacheDir(extractedDir, 'fmp', version, toolArch)
-    return ensureBinary(external_path_.join(installedDir, binaryName()))
+    ensureToolkit(extractedDir)
+    const installedDir = await tool_cache.cacheDir(extractedDir, 'gitops-preview-toolkit', version, toolArch)
+    return ensureToolkit(installedDir)
   })
 }
 
@@ -137581,7 +137582,7 @@ function resolveActionVersion() {
 function releaseURL(version) {
   const platform = platformName(process.platform)
   const arch = archiveArch(process.arch)
-  return `https://github.com/tobiash/flux-manifest-preview/releases/download/${version}/fmp_${version}_${platform}_${arch}.tar.gz`
+  return `https://github.com/tobiash/gitops-preview-toolkit/releases/download/${version}/gitops-preview-toolkit_${version}_${platform}_${arch}.tar.gz`
 }
 
 function resolveInputPath(inputPath) {
@@ -137595,7 +137596,7 @@ function resolveInputPath(inputPath) {
 
 function ensureBinary(binaryPath) {
   if (!external_fs_.existsSync(binaryPath)) {
-    throw new Error(`fmp binary not found at ${binaryPath}`)
+    throw new Error(`Preview executable not found at ${binaryPath}`)
   }
 
   if (process.platform !== 'win32') {
@@ -137748,9 +137749,18 @@ function archiveArch(arch) {
 
 function binaryName() {
   if (process.platform === 'win32') {
-    return 'fmp.exe'
+    return 'gitops-preview.exe'
   }
-  return 'fmp'
+  return 'gitops-preview'
+}
+
+function ensureToolkit(directory) {
+  for (const name of ['gitops-preview-flux', 'gitops-preview-crossplane', 'fmp']) {
+    ensureBinary(external_path_.join(directory, name))
+  }
+  // Agent/MCP services use PATH; ordinary commands also discover host siblings.
+  core.addPath(directory)
+  return ensureBinary(external_path_.join(directory, binaryName()))
 }
 
 function stringInput(name, defaultValue) {

@@ -24,7 +24,7 @@ func TestRenderSummaryMarkdown(t *testing.T) {
 	}
 
 	md := RenderSummaryMarkdown(req, report)
-	if !strings.Contains(md, "Flux Manifest Preview") {
+	if !strings.Contains(md, "gitops-preview-toolkit") {
 		t.Error("missing title")
 	}
 	if !strings.Contains(md, "CHANGED") {

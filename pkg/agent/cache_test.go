@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
 )
 
 func TestCacheRetainsOnlyBoundedArtifacts(t *testing.T) {
@@ -148,6 +148,9 @@ func TestSerializedSnapshotsPreserveComparisonAndOrigins(t *testing.T) {
 	}
 	for cluster, r := range before.Clusters {
 		for i, resource := range r.Resources() {
+			if got := left.snapshot.Clusters[cluster].ProvenanceForID(resource.CurId()); got != r.ProvenanceForID(resource.CurId()) {
+				t.Fatalf("named provenance changed on round trip: %+v", got)
+			}
 			if got := left.snapshot.Clusters[cluster].Resources()[i].MustYaml(); got != resource.MustYaml() {
 				t.Fatalf("YAML changed on round trip:\n%s\nwant:\n%s", got, resource.MustYaml())
 			}

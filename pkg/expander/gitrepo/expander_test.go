@@ -15,7 +15,7 @@ import (
 	fluxgit "github.com/fluxcd/pkg/git"
 	gitrepository "github.com/fluxcd/pkg/git/repository"
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/api/hasher"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/resource"

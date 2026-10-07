@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
 )
 
 func writeFixture(t *testing.T, root, name, data string) {

@@ -17,6 +17,24 @@ func TestGetInputSupportsUnderscoreAndHyphenEnvKeys(t *testing.T) {
 	}
 }
 
+func TestParseRequestCrossplaneRuntimeInputs(t *testing.T) {
+	t.Setenv("INPUT_CROSSPLANE", "true")
+	t.Setenv("INPUT_CROSSPLANE_ENGINE", "/trusted/crossplane-core")
+	t.Setenv("INPUT_CROSSPLANE_FUNCTION", "fn-a=localhost:9443\nfn-b=[::1]:9444")
+	t.Setenv("INPUT_FLUX_PLUGIN", "/trusted/flux")
+	t.Setenv("INPUT_CROSSPLANE_PLUGIN", "/trusted/crossplane")
+	req, err := ParseRequestFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !req.Crossplane || req.CrossplaneEngine != "/trusted/crossplane-core" || len(req.CrossplaneFunctions) != 2 {
+		t.Fatalf("runtime inputs not preserved: %#v", req)
+	}
+	if req.FluxPlugin != "/trusted/flux" || req.CrossplanePlugin != "/trusted/crossplane" {
+		t.Fatalf("trusted plugin selection missing: %#v", req)
+	}
+}
+
 func TestParseRequestFromEnvSupportsMultiplePaths(t *testing.T) {
 	t.Setenv("INPUT_PATHS", "clusters/kube\nclusters/prod\nclusters/edge")
 

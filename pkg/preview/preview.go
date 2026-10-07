@@ -2,6 +2,7 @@ package preview
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,16 +12,13 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/expander"
-	fluxksexpander "github.com/tobiash/flux-manifest-preview/pkg/expander/fluxks"
-	gitrepoexpander "github.com/tobiash/flux-manifest-preview/pkg/expander/gitrepo"
-	helmexpander "github.com/tobiash/flux-manifest-preview/pkg/expander/helm"
-	"github.com/tobiash/flux-manifest-preview/pkg/filter"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/pluginhost"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"gopkg.in/yaml.v3"
-	helmcli "helm.sh/helm/v4/pkg/cli"
 )
 
 // Preview renders and diffs Flux GitOps resources.
@@ -34,11 +32,25 @@ type Preview struct {
 	sopsDecrypt     bool
 	filters         *filter.FilterConfig
 	fluxKSEnabled   bool
-	gitRepoExpander *gitrepoexpander.Expander
-	helmSettings    *helmcli.EnvSettings
+	resolveGit      bool
+	helmSettings    *config.HelmSettings
+	commands        []plugin.Command
+	crossplane      *plugin.Command
+	host            *pluginhost.Host
+	borrowedHost    bool
 	log             logr.Logger
 	localOnly       bool
 	strictInputs    bool
+	runID           string
+	runActive       bool
+}
+
+// beginRun freezes source-selector resolutions across the independent sides of
+// one comparison, while a subsequent operation starts a new acquisition epoch.
+func (p *Preview) beginRun() func() {
+	previousID, previousActive := p.runID, p.runActive
+	p.runID, p.runActive = rand.Text(), true
+	return func() { p.runID, p.runActive = previousID, previousActive }
 }
 
 func (p *Preview) isClustered() bool {
@@ -84,7 +96,7 @@ func (p *Preview) Render(ctx context.Context, path string, out io.Writer) error 
 			result := results[cluster]
 			p.applyOutputOptions(result.render)
 			_, _ = fmt.Fprintf(out, "\n---\n# cluster: %s\n---\n", cluster)
-			yaml, err := result.render.AsYaml()
+			yaml, err := result.asYAML()
 			if err != nil {
 				return fmt.Errorf("error transforming cluster %q to yaml: %w", cluster, err)
 			}
@@ -93,17 +105,19 @@ func (p *Preview) Render(ctx context.Context, path string, out io.Writer) error 
 			}
 		}
 		var allErrors []error
+		var allWarnings []error
 		for _, cluster := range clusters {
 			allErrors = append(allErrors, results[cluster].errors...)
+			allWarnings = append(allWarnings, results[cluster].warnings...)
 		}
 		if len(allErrors) > 0 {
-			return &ExpansionError{Errors: allErrors}
+			return &ExpansionError{Errors: allErrors, Warnings: allWarnings}
 		}
 		return nil
 	}
 	result := results[""]
 	p.applyOutputOptions(result.render)
-	yaml, err := result.render.AsYaml()
+	yaml, err := result.asYAML()
 	if err != nil {
 		return fmt.Errorf("error transforming to yaml: %w", err)
 	}
@@ -133,12 +147,12 @@ func (p *Preview) RenderJSON(ctx context.Context, path string, out io.Writer) er
 		for _, cluster := range clusters {
 			result := results[cluster]
 			p.applyOutputOptions(result.render)
-			for i, res := range result.render.Resources() {
-				m, err := res.Map()
-				if err != nil {
-					diagnostics.Errors = append(diagnostics.Errors, fmt.Errorf("converting cluster %q resource %d to JSON map: %w", cluster, i+1, err))
-					return diagnostics
-				}
+			objects, err := result.objects()
+			if err != nil {
+				diagnostics.Errors = append(diagnostics.Errors, fmt.Errorf("converting cluster %q to JSON: %w", cluster, err))
+				return diagnostics
+			}
+			for _, m := range objects {
 				m["_fmp_cluster"] = cluster
 				items = append(items, m)
 			}
@@ -160,13 +174,15 @@ func (p *Preview) RenderJSON(ctx context.Context, path string, out io.Writer) er
 	}
 	result := results[""]
 	p.applyOutputOptions(result.render)
-	jsonData, err := result.render.AsJSON()
+	objects, err := result.objects()
 	if err != nil {
 		diagnostics.Errors = append(diagnostics.Errors, fmt.Errorf("error transforming to json: %w", err))
 		return diagnostics
 	}
-	if _, err := out.Write(jsonData); err != nil {
-		return fmt.Errorf("error writing output: %w", err)
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(map[string]any{"apiVersion": "v1", "kind": "List", "items": objects}); err != nil {
+		return fmt.Errorf("error encoding json: %w", err)
 	}
 	if len(diagnostics.Errors) > 0 {
 		return diagnostics
@@ -281,20 +297,38 @@ func New(opts ...Opt) (*Preview, error) {
 	if p.localOnly && p.sopsDecrypt {
 		return nil, errors.Join(fmt.Errorf("local-only mode does not support SOPS key acquisition"), p.Close())
 	}
+	if p.borrowedHost {
+		if len(p.commands) != 0 || p.crossplane != nil {
+			return nil, fmt.Errorf("borrowed plugin host cannot select plugin commands")
+		}
+		if _, err := p.sessionConfig(); err != nil {
+			return nil, err
+		}
+		return &p, nil
+	}
+	commands, err := p.pluginCommands()
+	if err != nil {
+		return nil, err
+	}
+	p.host, err = pluginhost.New(commands)
+	if err != nil {
+		return nil, fmt.Errorf("creating plugin host: %w", err)
+	}
 	return &p, nil
 }
 
-// Close releases cloned repositories. Repeated calls are safe after rendering stops.
+// Close releases owned plugin processes after rendering stops. Borrowed hosts
+// remain alive until their owner closes them.
 func (p *Preview) Close() error {
-	if p.gitRepoExpander != nil {
-		return p.gitRepoExpander.Close()
+	if p.host != nil && !p.borrowedHost {
+		return p.host.Close()
 	}
 	return nil
 }
 
 // WithLocalOnly rejects remote acquisition and filesystem references outside the
-// current source root and implies WithStrictInputs. This is not an OS sandbox;
-// external plugins are disabled.
+// current source root and implies WithStrictInputs. This is not an OS sandbox.
+// The bundled renderer enforces this policy; Kustomize execution plugins remain disabled.
 func WithLocalOnly() Opt {
 	return func(p *Preview) error {
 		p.localOnly = true
@@ -353,17 +387,20 @@ func WithFilterConfig(fc *filter.FilterConfig) Opt {
 	}
 }
 
-// WithHelm registers the Helm expander with the given settings.
-func WithHelm(helmnsettings *helmcli.EnvSettings) Opt {
+// WithHelm enables Helm rendering with neutral settings. Empty settings use the
+// Flux plugin's Helm environment defaults.
+func WithHelm(settings *config.HelmSettings) Opt {
 	return func(p *Preview) error {
-		p.helmSettings = helmnsettings
+		p.helmSettings = &config.HelmSettings{}
+		if settings != nil {
+			*p.helmSettings = *settings
+		}
 		return nil
 	}
 }
 
-// WithFluxKS registers the Flux Kustomization expander which discovers
-// spec.path from Flux Kustomization CRs and feeds them back to the renderer.
-// If a GitRepository expander is registered, it is used to resolve source paths.
+// WithFluxKS enables discovery of paths from Flux Kustomization resources in
+// the Flux plugin. WithGitRepo enables acquisition of their external sources.
 func WithFluxKS() Opt {
 	return func(p *Preview) error {
 		p.fluxKSEnabled = true
@@ -371,62 +408,12 @@ func WithFluxKS() Opt {
 	}
 }
 
-// WithGitRepo registers the GitRepository expander which clones external
-// repos to temp directories. Must be called before WithFluxKS.
+// WithGitRepo enables GitRepository acquisition in the Flux plugin.
 func WithGitRepo() Opt {
 	return func(p *Preview) error {
-		exp, err := gitrepoexpander.NewExpander(p.log)
-		if err != nil {
-			return fmt.Errorf("creating git repo expander: %w", err)
-		}
-		if p.gitRepoExpander != nil {
-			if err := p.gitRepoExpander.Close(); err != nil {
-				return errors.Join(err, exp.Close())
-			}
-		}
-		p.gitRepoExpander = exp
+		p.resolveGit = true
 		return nil
 	}
-}
-
-func (p *Preview) expandersForSource(path string) *expander.Registry {
-	if !p.localOnly && !p.fluxKSEnabled && p.gitRepoExpander == nil && p.helmSettings == nil {
-		return nil
-	}
-	registry := expander.NewRegistry(p.log)
-	var resolver *gitrepoexpander.Expander
-	if p.localOnly {
-		resolver = gitrepoexpander.NewLocalExpander(path, p.log)
-	} else if p.gitRepoExpander != nil {
-		resolver = p.gitRepoExpander.WithSourceRoot(path)
-	}
-	if resolver != nil {
-		registry.Register(resolver)
-	}
-	if p.fluxKSEnabled {
-		var ks *fluxksexpander.Expander
-		if resolver != nil {
-			ks = fluxksexpander.NewExpanderWithResolver(p.log, resolver)
-		} else {
-			ks = fluxksexpander.NewExpander(p.log)
-		}
-		if p.strictInputs {
-			ks.SetStrictInputs()
-		}
-		registry.Register(ks)
-	}
-	if p.helmSettings != nil {
-		runner := helmexpander.NewRunner(p.helmSettings, p.log)
-		if p.localOnly {
-			runner.SetLocalOnly(path)
-		}
-		helm := helmexpander.NewExpander(runner, resolver, p.log)
-		if p.strictInputs {
-			helm.SetStrictInputs()
-		}
-		registry.Register(helm)
-	}
-	return registry
 }
 
 // WithPaths configures the paths to render and whether to recurse into subdirectories.
@@ -515,7 +502,7 @@ func WithSOPSDecrypt() Opt {
 // DetectPermadiffs renders the same path twice and compares the results
 // to find non-deterministic output. It generates a filter config that
 // can be used to normalize these fields in subsequent diff/render runs.
-// Each render pass uses a fresh set of expanders to avoid cached state.
+// Each render pass uses a fresh evaluation while reusing the plugin processes.
 func (p *Preview) DetectPermadiffs(ctx context.Context, path string, out io.Writer) error {
 	return normalizationDiscovery{preview: p, path: path}.WritePermadiffConfig(ctx, out)
 }
@@ -580,11 +567,10 @@ func (p *Preview) GenerateInitConfig(ctx context.Context, path, destPath string)
 	return nil
 }
 
-// freshLoadRepo creates a new set of expanders for an independent render pass.
-// This is needed for permadiff detection where two separate render passes
-// must not share expander state (e.g. the Helm expander's dedup map).
+// freshLoadRepo opens independent render sessions. Acquisition artifacts may be
+// reused, but discovery and evaluation state must not hide permadiffs.
 func (p *Preview) freshLoadRepo(ctx context.Context, path string) (map[string]*loadRepoResult, error) {
-	return p.loadRepo(ctx, path)
+	return p.loadRepoOptions(ctx, path, true)
 }
 
 func boolPtr(b bool) *bool {

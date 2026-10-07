@@ -15,9 +15,9 @@ import (
 	"github.com/tmc/langchaingo/llms/anthropic"
 	"github.com/tmc/langchaingo/llms/openai"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 const (
@@ -253,8 +253,9 @@ func systemPrompt(cfg *config.AIConfig, repair bool) string {
 	var b strings.Builder
 	b.WriteString("You are reviewing rendered Kubernetes manifest changes for Flux GitOps. ")
 	b.WriteString("Return only valid JSON matching this schema: ")
-	b.WriteString(`{"summary":"markdown summary under 1000 characters","classifications":[{"id":"classification_id","title":"optional title","severity":"info|warning|error","priority":10,"message":"short reason","cluster":"optional","kind":"optional","namespace":"optional","name":"optional"}]}`)
+	b.WriteString(`{"summary":"markdown summary under 1000 characters","classifications":[{"id":"classification_id","title":"optional title","severity":"info|warning|error","priority":10,"message":"short reason","cluster":"optional","kind":"optional","namespace":"optional","name":"optional","logicalId":"optional"}]}`)
 	b.WriteString(". Do not include markdown fences. Classifications may be whole-change scoped or resource scoped. ")
+	b.WriteString("For resource-scoped classifications on unnamed resources, copy logicalId from the change; do not invent a name. ")
 	if len(cfg.AllowedClassifications) > 0 {
 		b.WriteString("Only use these classification ids: ")
 		b.WriteString(strings.Join(cfg.AllowedClassifications, ", "))
@@ -284,6 +285,7 @@ type payloadChange struct {
 	Kind        string `json:"kind"`
 	Namespace   string `json:"namespace,omitempty"`
 	Name        string `json:"name"`
+	LogicalID   string `json:"logicalId,omitempty"`
 	Producer    string `json:"producer,omitempty"`
 	UnifiedDiff string `json:"unifiedDiff,omitempty"`
 	Truncated   bool   `json:"truncated,omitempty"`
@@ -300,6 +302,7 @@ func buildInputPayload(req Request, limits inputLimits) (string, bool, error) {
 			Kind:        change.Kind,
 			Namespace:   change.Namespace,
 			Name:        change.Name,
+			LogicalID:   change.LogicalID,
 			Producer:    change.Producer,
 			UnifiedDiff: diffText,
 			Truncated:   truncated,

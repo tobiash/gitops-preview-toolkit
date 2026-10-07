@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/tobiash/flux-manifest-preview/pkg/agent"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/agent"
 )
 
 const maxArgumentBytes = 64 << 10
@@ -84,8 +84,10 @@ func makeSpec[In, Data any](op, description string, readOnly bool) *specificatio
 	case "query":
 		data.Properties["items"].MaxItems = new(100)
 		data.Properties["items"].Items.Properties["action"].Enum = []any{"", "added", "modified", "deleted"}
+		data.Properties["items"].Items.Properties["logicalId"].Description = "Stable preview identity for an unnamed composed output; never a Kubernetes name."
 	case "inspect":
 		data.Properties["action"].Enum = []any{"", "added", "modified", "deleted"}
+		data.Properties["logicalId"].Description = "Stable preview identity for an unnamed composed output; never a Kubernetes name."
 	case "check":
 		data.Properties["verdict"] = enum("passed", "failed")
 	case "release":

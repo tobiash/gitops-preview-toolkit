@@ -4,16 +4,25 @@
 package agent
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
 	"github.com/tobiash/k8q/pkg/engine"
 )
 
 // Options are startup capabilities; repository configuration cannot grant trust.
 type Options struct {
-	Trusted      bool
-	TTL          time.Duration
-	MaxSnapshots int
+	Trusted bool
+	// PluginCommands select executables only at startup. Local-only restrictions
+	// still apply unless Trusted is set. Empty commands use the default Flux plugin.
+	PluginCommands []plugin.Command
+	// Crossplane enables the default Crossplane plugin; CrossplaneConfig contains
+	// trusted runtime configuration, never repository-supplied execution grants.
+	Crossplane       bool
+	CrossplaneConfig json.RawMessage
+	TTL              time.Duration
+	MaxSnapshots     int
 	// MaxBytes bounds the sum of serialized cached artifact lengths. Cache
 	// payloads retain bytes only; temporary rendering/decoding allocations and
 	// fixed per-handle metadata are not a process heap quota.
@@ -94,6 +103,7 @@ type Origin struct {
 // ResourceSummary is an identity and provenance projection, never a full object.
 type ResourceSummary struct {
 	ResourceID   string  `json:"resourceId"`
+	LogicalID    string  `json:"logicalId,omitempty"`
 	Cluster      string  `json:"cluster"`
 	APIVersion   string  `json:"apiVersion"`
 	Kind         string  `json:"kind"`

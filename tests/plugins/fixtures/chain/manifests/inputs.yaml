@@ -1,0 +1,116 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: apps.live.example.org
+spec:
+  group: live.example.org
+  names:
+    kind: App
+    plural: apps
+  versions:
+  - name: v1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              marker:
+                type: string
+              stage:
+                type: string
+              defaulted:
+                type: string
+                default: real-default
+          status:
+            type: object
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: templating
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.0
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: live-chain
+spec:
+  compositeTypeRef:
+    apiVersion: live.example.org/v1
+    kind: App
+  mode: Pipeline
+  pipeline:
+  - step: template
+    functionRef:
+      name: templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{ $xr := .observed.composite.resource }}
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: {{ $xr.spec.stage }}-result
+            namespace: workload
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: named
+          data:
+            marker: {{ $xr.spec.marker | quote }}
+            defaulted: {{ $xr.spec.defaulted | quote }}
+            observedCount: {{ len (.observed.resources | default dict) | quote }}
+          ---
+          {{ if eq $xr.spec.stage "parent" }}
+          apiVersion: helm.toolkit.fluxcd.io/v2
+          kind: HelmRelease
+          metadata:
+            name: chain-chart
+            namespace: workload
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: chart
+          spec:
+            chart:
+              spec:
+                chart: ./chart
+                sourceRef:
+                  kind: GitRepository
+                  name: local-chart
+                  namespace: flux-system
+            values:
+              marker: {{ $xr.spec.marker | quote }}
+          {{ else }}
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            generateName: leaf-logical-
+            namespace: workload
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: logical
+          data:
+            marker: {{ $xr.spec.marker | quote }}
+            observedCount: {{ len (.observed.resources | default dict) | quote }}
+          {{ end }}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: local-chart
+  namespace: flux-system
+spec:
+  url: ./
+---
+apiVersion: live.example.org/v1
+kind: App
+metadata:
+  name: parent
+  namespace: workload
+spec:
+  stage: parent
+  marker: base

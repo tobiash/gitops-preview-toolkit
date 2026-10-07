@@ -1,32 +1,16 @@
-FROM golang:1.18 AS builder
+FROM golang:1.26.3 AS builder
 
-ENV GO111MODULE=on \
-  CGO_ENABLED=0 \
-  GOOS=linux \
-  GOARCH=amd64
-
-RUN apt-get -qq update && \
-  apt-get -yqq install upx
-
+ENV CGO_ENABLED=0
+ARG BUILDVCS=false
 WORKDIR /src
 COPY . .
+RUN go build -buildvcs=${BUILDVCS} -ldflags "-s -w" -o /out/fmp ./cmd/fmp && \
+    go build -buildvcs=${BUILDVCS} -ldflags "-s -w" -o /out/gitops-preview ./cmd/gitops-preview && \
+    go build -buildvcs=${BUILDVCS} -ldflags "-s -w" -o /out/gitops-preview-flux ./cmd/gitops-preview-flux && \
+    go build -buildvcs=${BUILDVCS} -ldflags "-s -w" -o /out/gitops-preview-crossplane ./cmd/gitops-preview-crossplane
 
-RUN go build \
-  -ldflags "-s -w -extldflags '-static'" \
-  -o /bin/app \
-  ./cmd/action \
-  && strip /bin/app \
-  && upx -q -9 /bin/app
-
-RUN echo "nobody:x:65534:65534:Nobody:/:" > /etc_passwd
-
-
-
-FROM scratch
-
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /etc_passwd /etc/passwd
-COPY --from=builder --chown=65534:0 /bin/app /app
-
-USER nobody
-ENTRYPOINT ["/app"]
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=builder /out/ /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/gitops-preview", "github-action"]

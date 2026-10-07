@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/filter"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -17,7 +19,7 @@ import (
 func TestSnapshotsDetachedAndClusterIdentity(t *testing.T) {
 	root := t.TempDir()
 	writePreviewFile(t, root, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: same\ndata:\n  value: before\n")
-	p, err := New(WithLocalOnly(), WithLogger(logr.Discard()), WithClusterPaths(map[string][]string{"a": {"."}, "b": {"."}}))
+	p, err := newTestPreview(t, WithLocalOnly(), WithLogger(logr.Discard()), WithClusterPaths(map[string][]string{"a": {"."}, "b": {"."}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +62,7 @@ func TestRunDiffRetainsExactInventories(t *testing.T) {
 		}
 		return nodes, nil
 	})}}}
-	p, err := New(WithLocalOnly(), WithPaths([]string{"."}, false), WithFilterConfig(fc))
+	p, err := newTestPreview(t, WithLocalOnly(), WithPaths([]string{"."}, false), WithFilterConfig(fc))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +87,7 @@ func TestRunDiffRetainsExactInventories(t *testing.T) {
 }
 
 func TestSnapshotCancellationAndMissingSource(t *testing.T) {
-	p, err := New(WithLocalOnly(), WithFluxKS(), WithPaths([]string{"."}, false))
+	p, err := newTestPreview(t, WithLocalOnly(), WithFluxKS(), WithPaths([]string{"."}, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +108,7 @@ func TestSnapshotCancellationAndMissingSource(t *testing.T) {
 func TestSnapshotRejectsInvalidResourceMap(t *testing.T) {
 	root := t.TempDir()
 	writePreviewFile(t, root, "cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: broken\n")
-	p, err := New(WithPaths([]string{"."}, false), WithFilterConfig(&filter.FilterConfig{
+	p, err := newTestPreview(t, WithPaths([]string{"."}, false), WithFilterConfig(&filter.FilterConfig{
 		Filters: []filter.KFilter{{Filter: invalidJSONMapFilter{}}},
 	}))
 	if err != nil {
@@ -121,5 +123,20 @@ func TestSnapshotRejectsInvalidResourceMap(t *testing.T) {
 	result, err := CompareSnapshots(t.Context(), snapshot, snapshot)
 	if err == nil || result.TotalChanged() != 0 {
 		t.Fatalf("CompareSnapshots(invalid map) = %#v, %v, want no authoritative changes", result, err)
+	}
+}
+
+func TestComparisonDoesNotSilentlyDiscardLogicalResources(t *testing.T) {
+	snapshot := &Snapshot{
+		Complete: true,
+		Clusters: map[string]*render.Render{"": render.NewDefaultRender(logr.Discard())},
+		Logical: map[string][]plugin.Resource{"": {{
+			ID: "composed/database", Logical: true,
+			YAML: "apiVersion: example.org/v1\nkind: Database\nmetadata: {}\n",
+		}}},
+	}
+	result, err := CompareSnapshots(t.Context(), snapshot, snapshot)
+	if err != nil || result.TotalChanged() != 0 {
+		t.Fatalf("CompareSnapshots(identical logical resources) = %#v, %v; want clean comparison", result, err)
 	}
 }

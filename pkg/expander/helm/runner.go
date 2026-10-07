@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	fmprender "github.com/tobiash/flux-manifest-preview/pkg/render"
+	fmprender "github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"helm.sh/helm/v4/pkg/action"
 	chartcommon "helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"

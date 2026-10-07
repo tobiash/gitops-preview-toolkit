@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/tobiash/flux-manifest-preview/pkg/config"
-	"github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/preview"
-	"github.com/tobiash/flux-manifest-preview/pkg/render"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/config"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/plugin"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/preview"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/api/resmap"
 	"sigs.k8s.io/kustomize/api/resource"
 	"sigs.k8s.io/kustomize/kyaml/resid"
@@ -28,6 +29,7 @@ type artifact struct {
 	Clusters []string
 	Records  []record
 	Policies *config.PolicyConfig
+	Evidence map[string][]json.RawMessage `json:",omitempty"`
 }
 
 func (c *cachedEntry) decode(id string, restoreSnapshot bool) (*entry, error) {
@@ -42,7 +44,13 @@ func (c *cachedEntry) decode(id string, restoreSnapshot bool) (*entry, error) {
 		e.changes = &diff.DiffResult{}
 		for _, r := range a.Records {
 			summary := r.Summary
-			change := diff.ResourceChange{ID: recordID(summary), Cluster: summary.Cluster, Kind: summary.Kind, Name: summary.Name, Namespace: summary.Namespace, Action: summary.Action, Producer: summary.Producer, BeforeOrigin: provenance(summary.BeforeOrigin), AfterOrigin: provenance(summary.AfterOrigin), Old: r.Old, New: r.New}
+			change := diff.ResourceChange{
+				ID: recordID(summary), LogicalID: summary.LogicalID, Cluster: summary.Cluster,
+				Kind: summary.Kind, Name: summary.Name, Namespace: summary.Namespace,
+				Action: summary.Action, Producer: summary.Producer,
+				BeforeOrigin: provenance(summary.BeforeOrigin), AfterOrigin: provenance(summary.AfterOrigin),
+				Old: r.Old, New: r.New,
+			}
 			p := change.AfterOrigin
 			if p == nil {
 				p = change.BeforeOrigin
@@ -63,16 +71,28 @@ func (c *cachedEntry) decode(id string, restoreSnapshot bool) (*entry, error) {
 		}
 		return e, nil
 	}
-	e.snapshot = &preview.Snapshot{Complete: true}
+	e.snapshot = &preview.Snapshot{Complete: true, Evidence: a.Evidence}
 	if !restoreSnapshot {
 		return e, nil
 	}
 	e.snapshot.Clusters = make(map[string]*render.Render, len(a.Clusters))
+	e.snapshot.Logical = make(map[string][]plugin.Resource)
 	for _, cluster := range a.Clusters {
 		e.snapshot.Clusters[cluster] = render.NewDefaultRender(logr.Discard())
 	}
 	factory := resmap.NewFactory(resource.NewFactory(nil))
 	for _, record := range a.Records {
+		if record.Summary.LogicalID != "" {
+			p := plugin.Provenance{}
+			if o := record.Summary.AfterOrigin; o != nil {
+				p = plugin.Provenance{Kind: o.Kind, Name: o.Name, Namespace: o.Namespace, Path: o.Path, Text: o.Text}
+			}
+			cluster := record.Summary.Cluster
+			e.snapshot.Logical[cluster] = append(e.snapshot.Logical[cluster], plugin.Resource{
+				ID: record.Summary.LogicalID, YAML: record.YAML, Logical: true, Provenance: p,
+			})
+			continue
+		}
 		// Reparse the original rendered YAML, not JSON maps: scalar tags,
 		// quoting, ordering, and comments can affect the existing comparator.
 		resources, err := factory.NewResMapFromBytes([]byte(record.YAML))
@@ -85,6 +105,9 @@ func (c *cachedEntry) decode(id string, restoreSnapshot bool) (*entry, error) {
 		}
 		if err := r.Append(resources.Resources()[0]); err != nil {
 			return nil, err
+		}
+		if p := provenance(record.Summary.AfterOrigin); p != nil {
+			r.SetProvenance(resources.Resources()[0].CurId(), *p)
 		}
 	}
 	return e, nil
@@ -105,24 +128,31 @@ func provenance(o *Origin) *render.Provenance {
 	return &render.Provenance{Kind: o.Kind, Name: o.Name, Namespace: o.Namespace, Path: o.Path, Text: o.Text}
 }
 
-// Render's provenance map has no public setter. Restore the exact saved origins
-// on comparison results, rather than inferring them from labels or annotations.
+// Restore exact saved origins, keeping logical slots distinct even when their
+// unnamed Kubernetes identities are identical.
 func restoreOrigins(result *diff.DiffResult, before, after []record) {
 	type key struct {
 		cluster string
 		id      resid.ResId
+		logical string
 	}
 	left, right := make(map[key]*Origin), make(map[key]*Origin)
+	identity := func(cluster string, id resid.ResId, logical string) key {
+		if logical != "" {
+			id = resid.ResId{}
+		}
+		return key{cluster: cluster, id: id, logical: logical}
+	}
 	for _, r := range before {
-		left[key{r.Summary.Cluster, recordID(r.Summary)}] = r.Summary.AfterOrigin
+		left[identity(r.Summary.Cluster, recordID(r.Summary), r.Summary.LogicalID)] = r.Summary.AfterOrigin
 	}
 	for _, r := range after {
-		right[key{r.Summary.Cluster, recordID(r.Summary)}] = r.Summary.AfterOrigin
+		right[identity(r.Summary.Cluster, recordID(r.Summary), r.Summary.LogicalID)] = r.Summary.AfterOrigin
 	}
 	for _, changes := range [][]diff.ResourceChange{result.Added, result.Modified, result.Deleted} {
 		for i := range changes {
 			c := &changes[i]
-			k := key{c.Cluster, c.ID}
+			k := identity(c.Cluster, c.ID, c.LogicalID)
 			c.BeforeOrigin, c.AfterOrigin = provenance(left[k]), provenance(right[k])
 			p := c.AfterOrigin
 			if p == nil {

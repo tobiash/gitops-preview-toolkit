@@ -1,4 +1,4 @@
-# Lefthook configuration for flux-manifest-preview
+# Lefthook configuration for gitops-preview-toolkit
 # Install hooks with: lefthook install
 
 pre-commit:
@@ -49,9 +49,12 @@ pre-push:
     action-cli-integration:
       run: |
         set -euo pipefail
-        tmp_fmp=$(mktemp)
-        trap 'rm -f "$tmp_fmp"' EXIT
-        go build -o "$tmp_fmp" ./cmd/fmp
+        bundle=$(mktemp -d)
+        trap 'rm -rf "$bundle"' EXIT
+        for binary in fmp gitops-preview gitops-preview-flux gitops-preview-crossplane; do
+          go build -buildvcs=false -o "$bundle/$binary" "./cmd/$binary"
+        done
+        tmp_fmp="$bundle/fmp"
 
         "$tmp_fmp" test tests/action -k clusters/kube --render-helm=false -q
         if "$tmp_fmp" test /tmp/does-not-exist -k nonexistent --render-helm=false -q 2>/dev/null; then

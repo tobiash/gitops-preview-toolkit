@@ -248,3 +248,28 @@ metadata:
 		t.Errorf("expected 0 resources, got %d", r.Size())
 	}
 }
+
+func TestSetProvenancePreservesStructuredOriginWithoutChangingYAML(t *testing.T) {
+	r := newRenderFromYAML(t, "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n")
+	res := r.Resources()[0]
+	before := res.MustYaml()
+	want := Provenance{Kind: "Kustomization", Name: "apps", Namespace: "flux", Path: "clusters/apps"}
+	r.SetProvenance(res.CurId(), want)
+	view, ok := r.ResourceViewForID(res.CurId())
+	if !ok || view.Provenance != want || view.YAML != before {
+		t.Fatalf("resource view = %#v, %t; want exact provenance and unchanged YAML", view, ok)
+	}
+	if err := r.ApplyNamespaceToNew(0, "apps"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ProvenanceForID(res.CurId()); got != want {
+		t.Fatalf("namespace transform lost structured origin: %#v, want %#v", got, want)
+	}
+	merged := NewDefaultRender(logr.Discard())
+	if err := merged.AbsorbAll(r); err != nil {
+		t.Fatal(err)
+	}
+	if got := merged.ProvenanceForID(res.CurId()); got != want {
+		t.Fatalf("merged provenance = %#v, want %#v", got, want)
+	}
+}

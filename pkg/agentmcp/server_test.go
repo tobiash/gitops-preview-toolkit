@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tobiash/flux-manifest-preview/pkg/agent"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/agent"
 )
 
 func TestTools(t *testing.T) {

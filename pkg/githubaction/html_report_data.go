@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tobiash/flux-manifest-preview/pkg/ai"
-	fmpdiff "github.com/tobiash/flux-manifest-preview/pkg/diff"
-	"github.com/tobiash/flux-manifest-preview/pkg/policy"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/ai"
+	fmpdiff "github.com/tobiash/gitops-preview-toolkit/pkg/diff"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/policy"
 )
 
 type HTMLReportData struct {
@@ -57,6 +57,8 @@ type HTMLResourceChange struct {
 	Kind         string        `json:"kind"`
 	Namespace    string        `json:"namespace"`
 	Name         string        `json:"name"`
+	LogicalID    string        `json:"logicalId,omitempty"`
+	Slot         string        `json:"slot,omitempty"`
 	Producer     string        `json:"producer"`
 	AddedLines   int           `json:"addedLines"`
 	DeletedLines int           `json:"deletedLines"`
@@ -129,13 +131,15 @@ func htmlResourceChanges(changes []fmpdiff.ResourceChange, maxDiffBytes int) []H
 		added, deleted := countChangedRows(rows)
 		apiVersion := gvkAPIVersion(change.ID.Group, change.ID.Version)
 		out = append(out, HTMLResourceChange{
-			ID:           resourceIdentity(change.Cluster, change.Producer, apiVersion, change.Kind, change.Namespace, change.Name),
+			ID:           resourceIdentity(change),
 			Action:       change.Action,
 			Cluster:      change.Cluster,
 			APIVersion:   apiVersion,
 			Kind:         change.Kind,
 			Namespace:    change.Namespace,
 			Name:         change.Name,
+			LogicalID:    change.LogicalID,
+			Slot:         compositionSlot(change),
 			Producer:     change.Producer,
 			AddedLines:   added,
 			DeletedLines: deleted,
@@ -147,11 +151,31 @@ func htmlResourceChanges(changes []fmpdiff.ResourceChange, maxDiffBytes int) []H
 }
 
 func resourceSortKey(r HTMLResourceChange) string {
-	return strings.Join([]string{r.Cluster, r.Producer, r.Kind, r.Namespace, r.Name, r.Action}, "\x00")
+	return strings.Join([]string{r.Cluster, r.Producer, r.Kind, r.Namespace, r.Name, r.LogicalID, r.Action}, "\x00")
 }
 
-func resourceIdentity(cluster, producer, apiVersion, kind, namespace, name string) string {
-	return strings.Join([]string{cluster, producer, apiVersion, kind, namespace, name}, "|")
+func resourceIdentity(change fmpdiff.ResourceChange) string {
+	if change.LogicalID != "" {
+		return strings.Join([]string{change.Cluster, "logical", change.LogicalID}, "|")
+	}
+	return strings.Join([]string{
+		change.Cluster, change.Producer, gvkAPIVersion(change.ID.Group, change.ID.Version),
+		change.Kind, change.Namespace, change.Name,
+	}, "|")
+}
+
+func compositionSlot(change fmpdiff.ResourceChange) string {
+	if change.LogicalID == "" || change.Name != "" {
+		return ""
+	}
+	for _, object := range []map[string]any{change.New, change.Old} {
+		metadata, _ := object["metadata"].(map[string]any)
+		annotations, _ := metadata["annotations"].(map[string]any)
+		if slot, _ := annotations["crossplane.io/composition-resource-name"].(string); slot != "" {
+			return slot
+		}
+	}
+	return ""
 }
 
 func parseUnifiedDiffRows(unified string) []HTMLDiffRow {
