@@ -125,12 +125,27 @@ func (s *Service) expand(ctx context.Context, se *session, inputs []plugin.Resou
 				isKS = false
 			}
 			isHR := gvk.Group == "helm.toolkit.fluxcd.io" && gvk.Kind == "HelmRelease" && se.config.Helm
-			if !isKS && !isHR {
+			isResourceSet := gvk.Group == "fluxcd.controlplane.io" && gvk.Kind == "ResourceSet"
+			if !isKS && !isHR && !isResourceSet {
 				continue
 			}
 			trigger, err := plugin.ParseResource([]byte(control.MustYaml()), plugin.Provenance{})
 			if err != nil {
 				return nil, err
+			}
+			if isResourceSet {
+				expansion := plugin.Expansion{ID: "flux:resourceset:" + trigger.ID, Trigger: trigger.ID, Resources: []plugin.Resource{}}
+				resources, err := renderResourceSet(ctx, control, inventory)
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					diagnostics = append(diagnostics, diagnostic("render-error", err, trigger.ID))
+				} else {
+					expansion.Resources = resources
+				}
+				next = append(next, expansion)
+				continue
 			}
 			inputKey := ""
 			if isHR {
