@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps-eu-west-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regional-settings
+data:
+  region: eu-west-1
+  message: Hello from Europe

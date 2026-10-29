@@ -68,6 +68,7 @@ The report includes:
 ## Key features
 
 - **Flux-aware rendering** — discovers `Kustomization.spec.path`, follows Flux dependency patterns, and can resolve external `GitRepository` sources.
+- **ResourceSet fan-out** — expands Flux ResourceSets from inline inputs, Static providers or pre-baked provider snapshots, then follows supported generated Kustomizations and HelmReleases. Try the [local two-region example and support boundaries](docs/examples/resourcesets/README.md).
 - **HelmRelease support** — renders `HelmRelease` resources through the Helm SDK, including post-renderers and `commonMetadata`.
 - **Crossplane composition preview** — opt-in expansion through a pinned external controller engine, with logical identities for unnamed outputs and separate evaluation evidence.
 - **Git-aware diffs** — compare `HEAD`, branches, commits, local paths, or your dirty worktree.
@@ -545,6 +546,8 @@ Not every validation or dependency error is classified separately yet. Treat any
 If either side fails to render, fmp suppresses the entire comparison rather than reporting missing resources as deletions or an empty diff as clean. Policy and AI assessments are skipped, and the CLI/action fails. JSON failures include `complete: false`; action reports carry error status and diagnostics even when advisory `fail-on-error` behavior is disabled.
 
 Malformed manifests, duplicate output identities, failed source acquisition, unresolved sources at the discovery fixed point, and missing discovered paths are failures. Known fmp configuration files are not treated as raw manifests. Distinct Flux rendering contexts remain separate even when they use the same directory, while equivalent bootstrap paths are deduplicated.
+
+ResourceSet inputs are offline desired-state inputs: missing named providers and dynamic providers without pre-baked `status.exportedInputs` make rendering incomplete, suppressing inferred deletions. Explicit empty snapshots can retract generated outputs. ResourceSet steps, render-affecting annotation transforms and template functions outside the allowlist are unsupported. Static providers without a live UID use a stable offline ID derived from `namespace/name`, not the live UID-derived ID. ResourceSet support does not provision CAPI clusters or expand ClusterClass, ClusterResourceSet or HelmChartProxy controllers, and does not imply full krops/Flux parity (including Flux decryption). See the [ResourceSet guide](docs/examples/resourcesets/README.md) for details.
 
 Completeness covers the configured render scope and detected failures. It does not guarantee full Flux feature parity, live-cluster validity, or runtime behavior. Rendering may access remote sources, credentials, or external programs according to your configuration; it is not sandboxed.
 
