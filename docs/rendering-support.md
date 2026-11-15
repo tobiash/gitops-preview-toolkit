@@ -56,24 +56,19 @@ The boundaries below follow `pkg/expander`, `pkg/fluxrender`, `pkg/render`, and
 | Flux `Kustomization.spec.path` | Supported | Bounded desired-state expansion, not a reconciliation loop |
 | Flux `targetNamespace` | Supported | Applied to discovered output |
 | Flux `postBuild.substitute` | Supported | Inline substitution; no cluster lookup |
-| Flux `patches`, `images`, `components` | Supported in integrated release† | Applied as Flux build customization, not merely raw directory Kustomize fields |
-| Flux `namePrefix`, `nameSuffix`, `commonMetadata` | Supported in integrated release† | Applied to discovered output |
+| Flux `patches`, `images`, `components` | Supported | Applied as Flux build customization; components must be local relative paths |
+| Flux `namePrefix`, `nameSuffix`, `commonMetadata` | Supported | Naming uses Kustomize transforms; common metadata applies to object metadata after substitution, not pod templates or selectors |
 | Flux `postBuild.substituteFrom` | Unsupported | ConfigMap/Secret lookup semantics not implemented |
 | Flux `spec.decryption` | Unsupported | Distinct from toolkit's explicit SOPS decryption option; not controller decryption parity |
 | Flux Kustomization source kinds | `GitRepository` supported | External resolution requires `--resolve-git` and available sources; other source kinds rejected |
 | ResourceSet / input providers | Bounded support | Inline, Static or pre-baked snapshots; see [example boundaries](examples/resourcesets/README.md) |
 | HelmRelease `spec.chart.spec` | Supported | Supported chart sources must be available; embedded Helm SDK, no standalone Helm CLI needed |
-| HelmRelease `chart.spec.valuesFiles`, `ignoreMissingValuesFiles` | Supported in integrated release† | Chart-file values are distinct from `valuesFrom` references |
+| HelmRelease `chart.spec.valuesFiles`, `ignoreMissingValuesFiles` | Supported | Ordered files replace chart defaults before release values; Git files are source-root relative, repository/OCI files are chart-relative. Distinct from `valuesFrom` references |
 | HelmRelease `spec.chartRef` | Unsupported | Existing HelmChart/OCIRepository references are not implemented |
 | HelmRelease inline `values` and `valuesFrom` | Supported | References resolved from rendered inventory, not live cluster lookups |
 | HelmRelease Kustomize post-renderers, `commonMetadata` | Supported | Built-in post-render chain; no arbitrary post-render command execution |
 | Crossplane composition expansion | Opt-in | Requires sibling plugin, pinned controller v2.4.2 and actual function runtime prerequisites |
 | Live Flux/Crossplane health, drift and readiness | Not simulated | Crossplane evaluation evidence is separate from desired resources |
-
-† Integration prerequisite: the Flux customization and Helm chart values-file
-changes are being integrated alongside this documentation. These rows describe
-the intended combined release, not the standalone doctor branch. The integrator
-must include and test those renderer changes before publishing these support claims.
 
 Known unsupported inputs may be rejected in strict-input validation paths. Do not
 interpret a doctor pass, or permissive rendering that ignores a field, as support.
