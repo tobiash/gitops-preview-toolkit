@@ -438,9 +438,14 @@ func (s *Service) buildPath(ctx context.Context, se *session, path expander.Disc
 		if !shouldBuild(build) {
 			return nil
 		}
+		if path.Flux != nil {
+			return built.AddFluxPathWithProducer(fs, dir, path.Producer, *path.Flux)
+		}
 		return built.AddPathWithProducer(fs, dir, path.Producer)
 	}
-	if se.options.Recursive {
+	// Flux generates one overlay for plain manifests, recursively including
+	// children; do not independently rebuild those children with the same inputs.
+	if se.options.Recursive && path.Flux == nil {
 		if err := build.WalkPaths(fs, full, visit); err != nil {
 			return nil, err
 		}
@@ -450,8 +455,13 @@ func (s *Service) buildPath(ctx context.Context, se *session, path expander.Disc
 	if err := built.ApplySubstitutionsToNew(0, path.Producer, path.Substitutions); err != nil {
 		return nil, err
 	}
-	if path.Namespace != "" {
+	if path.Namespace != "" && path.Flux == nil {
 		if err := built.ApplyNamespaceToNew(0, path.Namespace); err != nil {
+			return nil, err
+		}
+	}
+	if path.Flux != nil {
+		if err := build.ApplyCommonMetadata(built.Render, path.Flux.CommonMetadata); err != nil {
 			return nil, err
 		}
 	}
