@@ -14,7 +14,19 @@
       <a href="#overview" data-route="overview">Overview</a>
       <a href="#resources" data-route="resources">Resources</a>
     </nav>
+    <div class="presentation-controls">
+      <label class="sr-only" for="theme-select">Color theme</label>
+      <select id="theme-select"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      <button id="help-button" type="button" aria-label="Keyboard shortcut help">? Help</button>
+    </div>
   </header>
+  <div id="review-announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <dialog id="keyboard-help" aria-labelledby="help-title">
+    <h2 id="help-title">Keyboard shortcuts</h2>
+    <dl><dt>/</dt><dd>Focus resource search (opens workspace from overview)</dd><dt>j / k</dt><dd>Next / previous resource within current filters</dd><dt>r</dt><dd>Toggle selected resource reviewed</dd><dt>Escape</dt><dd>Return to resource list; close this help</dd><dt>↑ / ↓, Enter</dt><dd>Focus and open list resources</dd><dt>?</dt><dd>Open this help</dd></dl>
+    <p>Shortcuts are inactive in editable controls. Review marks are local notes, not approvals.</p>
+    <form method="dialog"><button>Close help</button></form>
+  </dialog>
   <main id="app" class="app" tabindex="-1"></main>
   <script type="application/json" id="fmp-report-data">{{ .JSON }}</script>
   <script>{{ .JS }}</script>

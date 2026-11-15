@@ -1,8 +1,53 @@
-(() => {
+(async () => {
 	const data = JSON.parse(
 		document.getElementById("fmp-report-data").textContent,
 	);
 	const app = document.getElementById("app");
+	data.resources ||= [];
+	let reviewFilter = "all", grouping = "none", diffMode = "unified";
+	let reviewed = new Set(), storageOK = true, storageKey;
+	let preferences = {};
+	try {
+		const bytes = new TextEncoder().encode(JSON.stringify(data));
+		const digest = await crypto.subtle.digest("SHA-256", bytes);
+		storageKey = "gpt-review-v1:" + [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+		const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+		if (!Array.isArray(saved) || !saved.every(id => typeof id === "string")) throw new Error("Invalid review state");
+		reviewed = new Set(saved);
+		preferences = JSON.parse(localStorage.getItem("gpt-report-preferences") || "{}");
+		if (!preferences || typeof preferences !== "object" || Array.isArray(preferences)) throw new Error("Invalid preferences");
+		localStorage.setItem(storageKey, JSON.stringify([...reviewed]));
+	} catch { storageOK = false; }
+	function savePreferences() {
+		try { localStorage.setItem("gpt-report-preferences", JSON.stringify(preferences)); } catch { storageOK = false; }
+	}
+	function reviewID(res) { return String(res.index); }
+	function progressText() {
+		return `${data.resources.filter(r => reviewed.has(reviewID(r))).length}/${data.resources.length} reviewed · local annotation${storageOK ? "" : " · session only (storage unavailable)"}`;
+	}
+	function announce(text) { document.getElementById("review-announcement").textContent = text; }
+	function scopedHash(index, view = diffMode) {
+		const params = new URLSearchParams();
+		if (view !== "unified") params.set("view", view);
+		if (filters.query.trim()) params.set("query", filters.query.trim());
+		if (reviewFilter !== "all") params.set("review", reviewFilter);
+		if (grouping !== "none") params.set("group", grouping);
+		return `#${index === undefined ? "resources" : "resource/" + index}${params.size ? "?" + params : ""}`;
+	}
+	function markReviewed(res) {
+		const rows = filteredResources(), position = rows.findIndex(r => r.index === res.index);
+		const id = reviewID(res);
+		if (reviewed.has(id)) reviewed.delete(id); else reviewed.add(id);
+		try {
+			if (!storageKey || !storageOK) throw new Error("Session only");
+			localStorage.setItem(storageKey, JSON.stringify([...reviewed]));
+		} catch { storageOK = false; }
+		if (reviewFilter === "unreviewed" && reviewed.has(id)) {
+			const next = rows[position + 1] || rows[position - 1];
+			location.hash = scopedHash(next?.index);
+		} else render();
+		announce(progressText());
+	}
 	const filters = {
 		query: "",
 	};
@@ -16,6 +61,7 @@
 		"name",
 		"logicalId",
 	]);
+	let pendingFocus;
 	let focusedIndex = -1;
 	let activeSuggestion = -1;
 
@@ -52,6 +98,7 @@
 				name: "resource",
 				index: Number(path.split("/")[1]),
 				view: new URLSearchParams(query || "").get("view") || "unified",
+				params: new URLSearchParams(query || ""),
 			};
 		}
 		const [name, query] = hash.split("?");
@@ -61,18 +108,52 @@
 	function setActiveNav(name) {
 		document
 			.querySelectorAll("[data-route]")
-			.forEach((a) => a.classList.toggle("active", a.dataset.route === name));
+			.forEach((a) => { a.classList.toggle("active", a.dataset.route === name); a.setAttribute("aria-current", a.dataset.route === name ? "page" : "false"); });
 	}
 
 	function render() {
 		const r = route();
+		const focusID = document.activeElement?.id;
+		const listScroll = app.querySelector(".workspace-list")?.scrollTop || 0;
+		if (r.name === "resource" || r.name === "resources") {
+			filters.query = resourceQueryFromParams(r.params);
+			reviewFilter = r.params.get("review") === "unreviewed" ? "unreviewed" : "all";
+			grouping = ["cluster", "producer", "kind"].includes(r.params.get("group")) ? r.params.get("group") : "none";
+			diffMode = r.params.get("view") === "split" ? "split" : "unified";
+		}
 		setActiveNav(r.name === "resource" ? "resources" : r.name);
 		focusedIndex = -1;
 		app.replaceChildren();
-		if (r.name === "resources") renderResources(r.params);
-		else if (r.name === "resource") renderResource(r.index, r.view);
+		app.classList.toggle("workspace-app", r.name === "resource" || r.name === "resources");
+		if (r.name === "resources" || r.name === "resource") renderWorkspace(r);
 		else renderOverview();
-		app.focus({ preventScroll: true });
+		const sidebar = app.querySelector(".workspace-list");
+		if (sidebar) {
+			sidebar.scrollTop = listScroll;
+			const selected = sidebar.querySelector(".selected");
+			if (selected && sidebar.clientHeight) {
+				const bounds = sidebar.getBoundingClientRect(), row = selected.getBoundingClientRect();
+				if (row.top < bounds.top) sidebar.scrollTop -= bounds.top - row.top;
+				else if (row.bottom > bounds.bottom) sidebar.scrollTop += row.bottom - bounds.bottom;
+			}
+		}
+		(document.getElementById(pendingFocus || focusID) || (r.name === "resource" && app.querySelector(".workspace-detail")) || app).focus({ preventScroll: true });
+		pendingFocus = undefined;
+		const nav = document.querySelector('[data-route="resources"]');
+		if (nav) nav.setAttribute("href", scopedHash());
+	}
+
+	function renderWorkspace(r) {
+		const sidebar = el("aside", { class: "workspace-list", "aria-label": "Changed resources" });
+		const detail = el("section", { class: "workspace-detail", tabindex: "-1", "aria-label": "Resource detail" });
+		const workspace = el("div", { class: `workspace ${r.name === "resource" ? "has-selection" : ""}` }, [sidebar, detail]);
+		app.append(el("div", { class: "workspace-heading" }, [el("h1", { text: "Review workspace" }), el("p", { class: "review-progress", text: progressText() })]), filterBar(), workspace);
+		renderFilteredList();
+		if (r.name === "resource") {
+			const start = app.children.length;
+			renderResource(r.index, diffMode);
+			while (app.children.length > start) detail.append(app.children[start]);
+		} else detail.append(el("div", { class: "empty-state", text: "Select a resource to inspect its manifest diff. Review marks are local notes, not policy approval." }));
 	}
 
 	function renderOverview() {
@@ -87,6 +168,11 @@
 			summaryGrid(),
 		);
 		app.append(actionLinks());
+		app.append(el("section", { class: "review-brief" }, [
+			el("div", {}, [el("strong", { text: "Report status" }), el("p", { text: `${data.meta.status || "unknown"}${data.meta.warnings?.length ? " · partial render warnings" : ""}${data.meta.diffTruncated ? " · report diff truncated" : ""}` })]),
+			el("div", {}, [el("strong", { text: "Deterministic policy" }), el("p", { text: data.policies.policyFailed ? "Failed" : "No failure reported · evaluation status unavailable" })]),
+			el("div", {}, [el("strong", { text: "Your review" }), el("p", { text: progressText() })]),
+		]));
 		renderWarningSection();
 		renderClusterSection();
 		renderSingleClusterPolicySignals();
@@ -96,10 +182,8 @@
 	}
 
 	function titleForStatus() {
-		if (data.summary.total === 0) return "No Manifest Changes";
-		if (data.policies.policyFailed || data.meta.status === "error")
-			return "Review Required";
-		return "Manifest Changes Detected";
+		const clusters = new Set(data.resources.map(r => r.cluster || "default")).size;
+		return `${data.summary.total} resource changes across ${clusters} cluster${clusters === 1 ? "" : "s"}`;
 	}
 
 	function summaryGrid() {
@@ -235,7 +319,7 @@
 			(a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]),
 		);
 		if (rows.length === 0) return;
-		app.append(el("h2", { text: "Classifications" }));
+		app.append(el("h2", { text: "Resource kinds" }));
 		const grid = el("div", { class: "kind-grid" });
 		for (const [kind, row] of rows) {
 			grid.append(
@@ -269,7 +353,7 @@
 				cluster: item.cluster || item.Cluster || "default",
 				priority: item.priority || item.Priority || 0,
 				severity: item.severity || item.Severity || "info",
-				text: item.id || item.ID || "classification",
+				text: `${item.provenance || item.Provenance || "unattributed"}: ${item.id || item.ID || "classification"}`,
 			});
 		}
 		for (const item of data.policies.violations || []) {
@@ -384,20 +468,6 @@
 		}
 	}
 
-	function renderResources(params) {
-		if (params) {
-			filters.query = resourceQueryFromParams(params);
-			if (!params.get("query") && filters.query) syncResourceFiltersToHash();
-		}
-		app.replaceChildren();
-		app.append(
-			el("div", { class: "eyebrow", text: "Resource Browser" }),
-			el("h1", { text: "Changed Resources" }),
-			filterBar(),
-		);
-		renderFilteredList();
-	}
-
 	function renderFilteredList() {
 		let list = app.querySelector(".resource-list");
 		if (list) {
@@ -406,10 +476,19 @@
 		}
 		else {
 			list = el("div", { class: "resource-list" });
-			app.append(list);
+			(app.querySelector(".workspace-list") || app).append(list);
 		}
 		const rows = filteredResources();
-		for (const res of rows) list.append(resourceCard(res));
+		const groups = new Map();
+		for (const res of rows) {
+			const key = grouping === "none" ? "" : res[grouping] || (grouping === "cluster" ? "default" : "unknown");
+			if (!groups.has(key)) groups.set(key, []);
+			groups.get(key).push(res);
+		}
+		for (const [key, resources] of groups) {
+			if (key) list.append(el("h2", { class: "group-heading", text: `${key} · ${resources.length}` }));
+			for (const res of resources) list.append(resourceCard(res));
+		}
 		if (rows.length === 0)
 			list.append(
 				el("div", {
@@ -423,6 +502,11 @@
 		const clear = app.querySelector(".clear-filters");
 		if (clear) clear.hidden = !hasActiveFilters();
 		focusedIndex = -1;
+		const r = route();
+		const nav = app.querySelector(".resource-nav");
+		if (nav && r.name === "resource") nav.replaceChildren(...resourceNav(r.index).children);
+		const notice = app.querySelector(".scope-notice");
+		if (notice) notice.hidden = rows.some(row => row.index === r.index);
 	}
 
 	function filterBar() {
@@ -432,6 +516,8 @@
 			name: "query",
 			"aria-label": "Search resources",
 			"aria-autocomplete": "list",
+			role: "combobox",
+			"aria-expanded": "false",
 			"aria-controls": "query-suggestions",
 			autocomplete: "off",
 			placeholder: "Search resources, e.g. podinfo cluster:staging action:modified",
@@ -454,6 +540,7 @@
 		search.addEventListener("blur", () => {
 			setTimeout(() => {
 				suggestions.hidden = true;
+				search.setAttribute("aria-expanded", "false");
 			}, 120);
 		});
 		search.addEventListener("keydown", (event) => {
@@ -461,7 +548,7 @@
 		});
 		const clear = actionButton("Clear filters", () => {
 			clearFilters();
-			renderResources(new URLSearchParams());
+			render();
 		}, "clear-filters");
 		clear.hidden = !hasActiveFilters();
 		bar.append(
@@ -475,24 +562,37 @@
 				text: `${filteredResources().length} of ${data.resources.length} resources`,
 			}),
 		);
+		const review = el("select", { id: "review-filter", "aria-label": "Review filter" });
+		for (const [value, text] of [["all", "All changes"], ["unreviewed", "Unreviewed only"]]) review.append(el("option", { value, text }));
+		review.value = reviewFilter;
+		review.addEventListener("change", () => { reviewFilter = review.value; syncResourceFiltersToHash(); render(); });
+		const group = el("select", { id: "group-filter", "aria-label": "Group resources" });
+		for (const value of ["none", "cluster", "producer", "kind"]) group.append(el("option", { value, text: value === "none" ? "No grouping" : `Group by ${value}` }));
+		group.value = grouping;
+		group.addEventListener("change", () => { grouping = group.value; syncResourceFiltersToHash(); render(); });
+		bar.append(fieldLabel("Review filter", review), fieldLabel("Group resources", group));
 		return bar;
 	}
 
 	function hasActiveFilters() {
-		return filters.query.trim() !== "";
+		return filters.query.trim() !== "" || reviewFilter !== "all";
 	}
 
 	function clearFilters() {
 		filters.query = "";
+		reviewFilter = "all";
 		syncResourceFiltersToHash();
 	}
 
 	function syncResourceFiltersToHash() {
-		const params = new URLSearchParams();
-		if (filters.query.trim()) params.set("query", filters.query.trim());
-		const query = params.toString();
-		const next = `#resources${query ? "?" + query : ""}`;
+		const r = route();
+		const next = scopedHash(r.name === "resource" ? r.index : undefined);
 		if (location.hash !== next) history.replaceState(null, "", next);
+		for (const link of app.querySelectorAll(".back-to-list")) link.setAttribute("href", scopedHash());
+		const breadcrumb = app.querySelector(".breadcrumb")?.querySelector("a");
+		if (breadcrumb) breadcrumb.setAttribute("href", scopedHash());
+		const nav = document.querySelector('[data-route="resources"]');
+		if (nav) nav.setAttribute("href", scopedHash());
 	}
 
 	function resourceQueryFromParams(params) {
@@ -511,12 +611,14 @@
 		activeSuggestion = -1;
 		panel.replaceChildren();
 		panel.hidden = suggestions.length === 0;
+		input.setAttribute("aria-expanded", String(!panel.hidden));
 		for (const [index, suggestion] of suggestions.entries()) {
 			const option = el("button", {
 				class: "query-suggestion",
 				role: "option",
 				type: "button",
 				"data-index": String(index),
+				id: `query-option-${index}`,
 			});
 			option.append(
 				el("span", { class: "suggestion-label", text: suggestion.label }),
@@ -548,10 +650,12 @@
 		} else if (event.key === "Escape") {
 			event.stopPropagation();
 			panel.hidden = true;
+			input.setAttribute("aria-expanded", "false");
 		}
 	}
 
 	function markActiveSuggestion(options) {
+		document.getElementById("filter-query").setAttribute("aria-activedescendant", `query-option-${activeSuggestion}`);
 		for (const [index, option] of options.entries()) {
 			option.classList.toggle("active", index === activeSuggestion);
 			option.setAttribute("aria-selected", String(index === activeSuggestion));
@@ -637,6 +741,7 @@
 	function filteredResources() {
 		const parsed = parseResourceQuery(filters.query);
 		return data.resources.filter((r) => {
+			if (reviewFilter === "unreviewed" && reviewed.has(reviewID(r))) return false;
 			const haystack =
 				`${resourceName(r)} ${r.logicalId || ""} ${r.namespace || "cluster-scoped"} ${r.kind} ${r.cluster || "default"} ${r.producer || ""} ${r.action} ${r.apiVersion || ""}`.toLowerCase();
 			return (
@@ -741,7 +846,7 @@
 	function resourceCard(res) {
 		return el(
 			"a",
-			{ class: "resource-card", href: `#resource/${res.index}`, tabindex: "0" },
+			{ class: `resource-card${route().index === res.index ? " selected" : ""}`, href: scopedHash(res.index), tabindex: "0", "aria-current": route().index === res.index ? "true" : "false" },
 			[
 				el("div", { class: "resource-title" }, [
 					el("strong", {
@@ -753,7 +858,7 @@
 							class: "pill cluster",
 							text: res.cluster || "default",
 						}),
-						el("span", { class: `pill ${res.action}`, text: res.action }),
+						el("span", { class: `pill ${res.action}`, text: `${res.action}${reviewed.has(reviewID(res)) ? " · ✓ reviewed" : ""}` }),
 					]),
 				]),
 				el("div", {
@@ -809,19 +914,19 @@
 
 	function resourceURL(index, view) {
 		const url = new URL(location.href);
-		url.hash = `resource/${index}?view=${view}`;
+		url.hash = scopedHash(index, view);
 		return url.href;
 	}
 
 	function copyText(button, text, resetText) {
-		writeClipboard(text).then(() => {
+		Promise.resolve().then(() => writeClipboard(text)).then(() => {
 			button.textContent = "Copied";
 			button.classList.add("copied");
 			setTimeout(() => {
 				button.textContent = resetText;
 				button.classList.remove("copied");
 			}, 1500);
-		});
+		}).catch(() => { button.textContent = "Copy failed"; announce("Clipboard unavailable. Select and copy the diff or address manually."); });
 	}
 
 	function writeClipboard(text) {
@@ -834,7 +939,7 @@
 		document.body.append(textarea);
 		textarea.select();
 		try {
-			document.execCommand("copy");
+			if (!document.execCommand("copy")) return Promise.reject(new Error("Copy unavailable"));
 			return Promise.resolve();
 		} finally {
 			textarea.remove();
@@ -842,16 +947,18 @@
 	}
 
 	function renderResource(index, view) {
-		const res = data.resources[index];
+		app.append(el("a", { class: "back-to-list", href: scopedHash(), text: "← Back to resources" }));
+		const res = data.resources.find(r => r.index === index);
 		if (!res) {
 			app.append(
 				el("div", { class: "empty-state", text: "Resource not found." }),
 			);
 			return;
 		}
+		app.append(el("p", { class: "scope-notice", hidden: filteredResources().some(r => r.index === index), text: "This linked resource is outside the current filters. Filters have been preserved; return to the list or adjust them to continue." }));
 		app.append(
 			el("div", { class: "breadcrumb" }, [
-				el("a", { href: "#resources", text: "Resources" }),
+				el("a", { href: scopedHash(), text: "Resources" }),
 				document.createTextNode(` / ${res.kind} / ${resourceName(res)}`),
 			]),
 			el("section", { class: "detail-header" }, [
@@ -863,6 +970,7 @@
 					}),
 				]),
 				el("div", { class: "detail-actions" }, [
+					Object.assign(actionButton(reviewed.has(reviewID(res)) ? "✓ Reviewed — undo" : "Mark reviewed", () => markReviewed(res), "review-button"), { id: "mark-reviewed" }),
 					resourceNav(index),
 					diffToggle(index, view),
 					copyLinkButton(index, view),
@@ -875,13 +983,15 @@
 	}
 
 	function resourceNav(index) {
+		const rows = filteredResources();
+		const position = rows.findIndex(r => r.index === index);
 		const previous =
-			index > 0
-				? el("a", { href: `#resource/${index - 1}`, text: "Previous" })
+			position > 0
+				? el("a", { href: scopedHash(rows[position - 1].index), text: "Previous" })
 				: el("span", { text: "Previous", "aria-disabled": "true" });
 		const next =
-			index < data.resources.length - 1
-				? el("a", { href: `#resource/${index + 1}`, text: "Next" })
+			position >= 0 && position < rows.length - 1
+				? el("a", { href: scopedHash(rows[position + 1].index), text: "Next" })
 				: el("span", { text: "Next", "aria-disabled": "true" });
 		return el("div", { class: "resource-nav", "aria-label": "Resource navigation" }, [
 			previous,
@@ -894,11 +1004,12 @@
 		for (const mode of ["unified", "split"]) {
 			const button = el("button", {
 				class: view === mode ? "active" : "",
+				"aria-pressed": String(view === mode),
 				text: mode === "split" ? "Split" : "Unified",
 				type: "button",
 			});
 			button.addEventListener("click", () => {
-				location.hash = `resource/${index}?view=${mode}`;
+				location.hash = scopedHash(index, mode);
 			});
 			toggle.append(button);
 		}
@@ -907,6 +1018,7 @@
 
 	function diffView(res, view) {
 		const wrap = el("div", { class: `diff ${view}` });
+		if (!res.diffRows.length && !res.truncated) wrap.append(el("p", { class: "empty-state", text: "No diff lines available for this resource." }));
 		for (const row of res.diffRows)
 			wrap.append(view === "split" ? splitRow(row) : unifiedRow(row));
 		if (res.truncated)
@@ -952,7 +1064,7 @@
 			}),
 			el("div", {
 				class: `cell ${row.oldLine ? "" : "empty"}`,
-				text: row.oldText || "",
+				text: row.oldLine ? `${row.type === "deleted" ? "-" : " "}${row.oldText || ""}` : "",
 			}),
 			el("div", {
 				class: "cell line-no",
@@ -960,13 +1072,23 @@
 			}),
 			el("div", {
 				class: `cell ${row.newLine ? "" : "empty"}`,
-				text: row.newText || "",
+				text: row.newLine ? `${row.type === "added" ? "+" : " "}${row.newText || ""}` : "",
 			}),
 		]);
 	}
 
 	function handleKeydown(e) {
-		if (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(e.target.tagName)) return;
+		if (e.ctrlKey || e.metaKey || e.altKey || e.target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(e.target.tagName)) return;
+		if (e.key === "?") { e.preventDefault(); showHelp(); return; }
+		if (document.getElementById("keyboard-help")?.open) return;
+		if (e.shiftKey) return;
+		if (e.key === "/") { e.preventDefault(); const search = document.getElementById("filter-query"); if (search) search.focus(); else { pendingFocus = "filter-query"; location.hash = scopedHash(); } return; }
+		const current = route();
+		if (current.name === "resource") {
+			const rows = filteredResources(), position = rows.findIndex(r => r.index === current.index);
+			if (["j", "k"].includes(e.key) && position >= 0) { e.preventDefault(); const next = rows[position + (e.key === "j" ? 1 : -1)]; if (next) location.hash = scopedHash(next.index); return; }
+			if (e.key === "r") { const res = data.resources.find(r => r.index === current.index); if (res) { e.preventDefault(); markReviewed(res); } return; }
+		}
 		const cards = () => [...app.querySelectorAll(".resource-card")];
 		const r = route();
 
@@ -989,10 +1111,22 @@
 
 		if (r.name === "resource" && e.key === "Escape") {
 			e.preventDefault();
-			location.hash = "#resources";
+			location.hash = scopedHash();
 		}
 	}
 
+	function showHelp() {
+		const dialog = document.getElementById("keyboard-help");
+		if (!dialog.open) dialog.showModal();
+	}
+	const theme = document.getElementById("theme-select");
+	function applyTheme() { document.documentElement.setAttribute("data-theme", ["light", "dark"].includes(preferences.theme) ? preferences.theme : "system"); }
+	if (theme) {
+		theme.value = preferences.theme || "system";
+		theme.addEventListener("change", () => { preferences.theme = theme.value; applyTheme(); savePreferences(); });
+		applyTheme();
+	}
+	document.getElementById("help-button")?.addEventListener("click", showHelp);
 	window.addEventListener("hashchange", render);
 	window.addEventListener("keydown", handleKeydown);
 	render();
