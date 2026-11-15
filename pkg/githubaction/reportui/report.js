@@ -35,7 +35,7 @@
 		return `#${index === undefined ? "resources" : "resource/" + index}${params.size ? "?" + params : ""}`;
 	}
 	function markReviewed(res) {
-		const rows = filteredResources(), position = rows.findIndex(r => r.index === res.index);
+		const rows = displayedResources(), position = rows.findIndex(r => r.index === res.index);
 		const id = reviewID(res);
 		if (reviewed.has(id)) reviewed.delete(id); else reviewed.add(id);
 		try {
@@ -169,7 +169,7 @@
 		);
 		app.append(actionLinks());
 		app.append(el("section", { class: "review-brief" }, [
-			el("div", {}, [el("strong", { text: "Report status" }), el("p", { text: `${data.meta.status || "unknown"}${data.meta.warnings?.length ? " · partial render warnings" : ""}${data.meta.diffTruncated ? " · report diff truncated" : ""}` })]),
+			el("div", {}, [el("strong", { text: "Report status" }), el("p", { text: `${data.meta.status || "unknown"}${data.meta.warnings?.length ? ` · ${data.meta.warnings.length} warning${data.meta.warnings.length === 1 ? "" : "s"}` : ""}${data.meta.diffTruncated ? " · report diff truncated" : ""}` })]),
 			el("div", {}, [el("strong", { text: "Deterministic policy" }), el("p", { text: data.policies.policyFailed ? "Failed" : "No failure reported · evaluation status unavailable" })]),
 			el("div", {}, [el("strong", { text: "Your review" }), el("p", { text: progressText() })]),
 		]));
@@ -279,7 +279,7 @@
 			list.append(
 				el("div", { class: "card warning-card" }, [
 					el("div", { class: "card-title" }, [
-						el("strong", { text: "Partial render" }),
+						el("strong", { text: "Report warning" }),
 						el("span", { class: "pill policy-signal warning", text: "warning" }),
 					]),
 					el("small", { text: warning }),
@@ -478,13 +478,8 @@
 			list = el("div", { class: "resource-list" });
 			(app.querySelector(".workspace-list") || app).append(list);
 		}
-		const rows = filteredResources();
-		const groups = new Map();
-		for (const res of rows) {
-			const key = grouping === "none" ? "" : res[grouping] || (grouping === "cluster" ? "default" : "unknown");
-			if (!groups.has(key)) groups.set(key, []);
-			groups.get(key).push(res);
-		}
+		const groups = groupedResources();
+		const rows = [...groups.values()].flat();
 		for (const [key, resources] of groups) {
 			if (key) list.append(el("h2", { class: "group-heading", text: `${key} · ${resources.length}` }));
 			for (const res of resources) list.append(resourceCard(res));
@@ -738,6 +733,25 @@
 			.sort((a, b) => a.localeCompare(b));
 	}
 
+	// Fix group order from the report, not the remaining filtered rows, so
+	// reviewing a group's first resource cannot move that group behind another.
+	// Every navigation path uses this same projection as the displayed list.
+	function groupedResources() {
+		const groups = new Map();
+		const groupKey = res => grouping === "none" ? "" : res[grouping] || (grouping === "cluster" ? "default" : "unknown");
+		for (const res of data.resources) {
+			const key = groupKey(res);
+			if (!groups.has(key)) groups.set(key, []);
+		}
+		for (const res of filteredResources()) groups.get(groupKey(res)).push(res);
+		for (const [key, rows] of groups) if (!rows.length) groups.delete(key);
+		return groups;
+	}
+
+	function displayedResources() {
+		return [...groupedResources().values()].flat();
+	}
+
 	function filteredResources() {
 		const parsed = parseResourceQuery(filters.query);
 		return data.resources.filter((r) => {
@@ -983,7 +997,7 @@
 	}
 
 	function resourceNav(index) {
-		const rows = filteredResources();
+		const rows = displayedResources();
 		const position = rows.findIndex(r => r.index === index);
 		const previous =
 			position > 0
@@ -1085,7 +1099,7 @@
 		if (e.key === "/") { e.preventDefault(); const search = document.getElementById("filter-query"); if (search) search.focus(); else { pendingFocus = "filter-query"; location.hash = scopedHash(); } return; }
 		const current = route();
 		if (current.name === "resource") {
-			const rows = filteredResources(), position = rows.findIndex(r => r.index === current.index);
+			const rows = displayedResources(), position = rows.findIndex(r => r.index === current.index);
 			if (["j", "k"].includes(e.key) && position >= 0) { e.preventDefault(); const next = rows[position + (e.key === "j" ? 1 : -1)]; if (next) location.hash = scopedHash(next.index); return; }
 			if (e.key === "r") { const res = data.resources.find(r => r.index === current.index); if (res) { e.preventDefault(); markReviewed(res); } return; }
 		}

@@ -43,11 +43,11 @@ const resources = [
 	apiVersion: "v1", producer: "XR apps/parent", addedLines: 0, deletedLines: 0, diffRows: [],
 }));
 
-async function runtime(hash, inputResources = resources, storage = new Map(), blocked = false) {
+async function runtime(hash, inputResources = resources, storage = new Map(), blocked = false, meta = {}) {
 	const app = new Element("main");
 	const announcement = new Element("div");
 	const data = {
-		meta: {}, summary: { total: inputResources.length }, policies: {}, resources: inputResources,
+		meta, summary: { total: inputResources.length }, policies: {}, resources: inputResources,
 	};
 	const document = {
 		getElementById: (id) => id === "app" ? app : id === "fmp-report-data" ? { textContent: JSON.stringify(data) } : id === "review-announcement" ? announcement : app.querySelectorAll("input").concat(app.querySelectorAll("button"), app.querySelectorAll("select")).find(e => e.id === id),
@@ -195,3 +195,45 @@ test("empty and truncated diffs are explicit, hostile resource text stays text",
 	assert.match(app.querySelector(".diff").querySelector(".empty-state").textContent, /truncated/);
 	assert.match((await render("#resource/0")).querySelector(".diff").querySelector(".empty-state").textContent, /No diff lines/);
 });
+
+test("warnings do not imply an incomplete render or replace actual report status", async () => {
+	const app = await render("#overview", resources, new Map(), false, {
+		status: "changed", warnings: ["Optional assessment unavailable"],
+	});
+	assert.equal(app.querySelector(".review-brief").querySelector("p").textContent, "changed · 1 warning");
+	assert.equal(app.querySelector(".warning-card").querySelector("strong").textContent, "Report warning");
+	assert.equal(app.querySelector(".warning-card").querySelector("small").textContent, "Optional assessment unavailable");
+	const failed = await render("#overview", resources, new Map(), false, {
+		status: "error", warnings: ["First warning", "Second warning"], diffTruncated: true,
+	});
+	assert.equal(failed.querySelector(".review-brief").querySelector("p").textContent, "error · 2 warnings · report diff truncated");
+});
+
+for (const grouping of ["kind", "producer", "cluster"]) {
+	test(`${grouping} grouping shares displayed order with links, keyboard and review advancement`, async () => {
+		const input = resources.map((res, index) => ({
+			...res, kind: index % 2 ? "ConfigMap" : "Secret",
+			producer: index % 2 ? "producer-b" : "producer-a",
+			cluster: index % 2 ? "staging" : "production",
+		}));
+		const scope = `view=split&query=namespace%3Aapps&review=unreviewed&group=${grouping}`;
+		const env = await runtime(`#resource/0?${scope}`, input);
+		assert.deepEqual(env.app.querySelectorAll(".resource-card").map(card => Number(card.href.match(/resource\/(\d+)/)[1])), [0, 2, 1, 3]);
+		assert.equal(env.app.querySelector(".resource-nav").querySelector("a").href, `#resource/2?${scope}`);
+		env.key("j");
+		assert.equal(env.location.hash, `#resource/2?${scope}`);
+		env.listeners.hashchange();
+		assert.deepEqual(env.app.querySelector(".resource-nav").querySelectorAll("a").map(a => a.href), [`#resource/0?${scope}`, `#resource/1?${scope}`]);
+		env.key("k");
+		assert.equal(env.location.hash, `#resource/0?${scope}`);
+		env.listeners.hashchange();
+		env.app.querySelector(".review-button").click();
+		assert.equal(env.location.hash, `#resource/2?${scope}`);
+		env.listeners.hashchange();
+		assert.deepEqual(env.app.querySelectorAll(".resource-card").map(card => Number(card.href.match(/resource\/(\d+)/)[1])), [2, 1, 3]);
+		env.key("r");
+		assert.equal(env.location.hash, `#resource/1?${scope}`);
+		env.listeners.hashchange();
+		assert.deepEqual(env.app.querySelectorAll(".resource-card").map(card => Number(card.href.match(/resource\/(\d+)/)[1])), [1, 3]);
+	});
+}

@@ -53,7 +53,8 @@ permissions may be denied on local files; manual selection/copy remains availabl
 
 ## Boundaries
 
-Warnings and truncated diffs are evidence limitations, not successful renders.
+Warnings are shown independently of the actual report status; their presence
+does not imply incomplete rendering. Truncated diffs limit the available evidence.
 Archived payloads with no explicit policy evaluation outcome show that the outcome
 is unavailable. Structured semantic change summaries, full provenance trees, and
 cross-cluster equivalence review are deferred until the backend supplies reliable

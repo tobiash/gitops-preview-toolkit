@@ -101,3 +101,14 @@ Deferred: steps 5–6 remain future milestones. The existing payload cannot
 distinguish policy-not-evaluated from policy-passed, so absence of a failure is
 shown as evaluation status unavailable, never invented approval. Hashing requires
 Web Crypto; unsupported/insecure contexts use explicitly session-only progress.
+
+### Review follow-up
+
+Warnings now show their count without implying an incomplete render; individual
+cards say “Report warning” and preserve the actual status independently. Resource
+list rendering, previous/next, `j`/`k`, and reviewed auto-advance share one grouped
+ordering projection. Group order follows first occurrence in the original report
+and stays stable as reviewed resources disappear; resource order within each
+group remains unchanged. Interleaved kind/producer/cluster regression cases and
+non-incompleteness warning cases bring the Node suite to 14 passing tests. The
+targeted Go githubaction suite also passes with bounded parallelism.
