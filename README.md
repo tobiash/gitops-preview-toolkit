@@ -122,6 +122,33 @@ go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.1
 - Helm rendering uses the SDK in the Flux plugin; a standalone `helm` executable is not required. Unset Helm settings use the plugin's environment defaults.
 - Release archives `gitops-preview-toolkit_<tag>_<os>_<arch>.tar.gz` contain the core, both plugins, and `fmp`. Compatibility `fmp_<tag>_<os>_<arch>.tar.gz` archives include `fmp` and both plugins. The GitHub Action downloads and caches the complete toolkit.
 
+### First-run preflight
+
+```bash
+gitops-preview doctor . -k clusters/production
+gitops-preview doctor . --output json
+# Only when explicitly opting into trusted Crossplane prerequisites:
+gitops-preview doctor . -k clusters/production --crossplane \
+  --crossplane-engine "$HOME/.local/bin/crossplane-core"
+```
+
+Doctor reports configuration discovery, effective root directory existence, plugin
+discovery and name/protocol compatibility. It starts trusted plugins for `Describe`
+only, without rendering, downloading sources/charts, opening a render session or
+running composition functions. Crossplane engine discovery and `--version` run only
+with `--crossplane`; repository `crossplane.enabled` never grants execution.
+
+Default output is deterministic text; `--output json` emits one document even on
+failure. Exit codes are **0** for passed preflight (warnings/skipped checks allowed),
+**2** for configuration/root/invocation problems, and **3** for missing or incompatible
+dependencies. Configuration errors take precedence if both classes occur.
+
+A pass is **not** full render validation. Docker access, function images/development
+targets, remote sources, chart availability and unsupported manifest inputs are not
+validated. Follow with `gitops-preview test .` or `gitops-preview render .`, passing
+the same roots/config/runtime flags. Those deeper checks may acquire sources and
+execute explicitly enabled functions. See the [rendering support matrix](docs/rendering-support.md).
+
 ### Configuration and Crossplane
 
 The host discovers `.gitops-preview.yaml` (or `.gitops-preview.yml`) first, then legacy `.fmp.yaml`, `.fmp.yml`, or `.github/fmp.yaml`. `--config` and the existing Action `config` input select an explicit file. A minimal configuration is:
