@@ -119,8 +119,6 @@ func TestLocalSnapshotUnsupportedFluxInputs(t *testing.T) {
 		{"nameSuffix", "Kustomization", "  nameSuffix: -changed\n"},
 		{"commonMetadata", "Kustomization", "  commonMetadata: {labels: {changed: 'true'}}\n"},
 		{"decryption", "Kustomization", "  decryption: {provider: sops}\n"},
-		{"valuesFiles", "HelmRelease", "      valuesFiles: [chart/override.yaml]\n"},
-		{"ignoreMissingValuesFiles", "HelmRelease", "      ignoreMissingValuesFiles: true\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()

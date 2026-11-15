@@ -54,7 +54,7 @@ func TestAgentStrictInputsInBothProfiles(t *testing.T) {
 				writeFixture(t, root, "manifests/object.yaml", "apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata: {name: child, namespace: default}\nspec:\n  path: child\n  sourceRef: {kind: GitRepository, name: local}\n  postBuild:\n    substituteFrom: [{kind: Secret, name: required, optional: false}]\n")
 				writeFixture(t, root, "child/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: child}\ndata: {value: '${REQUIRED}'}\n")
 			} else {
-				writeFixture(t, root, "manifests/object.yaml", "apiVersion: helm.toolkit.fluxcd.io/v2\nkind: HelmRelease\nmetadata: {name: app, namespace: default}\nspec:\n  chart:\n    spec:\n      chart: chart\n      sourceRef: {kind: GitRepository, name: local}\n      valuesFiles: [chart/override.yaml]\n")
+				writeFixture(t, root, "manifests/object.yaml", "apiVersion: helm.toolkit.fluxcd.io/v2\nkind: HelmRelease\nmetadata: {name: app, namespace: default}\nspec:\n  postRenderers: [{unsupported: {}}]\n  chart:\n    spec:\n      chart: chart\n      sourceRef: {kind: GitRepository, name: local}\n")
 				writeFixture(t, root, "chart/Chart.yaml", "apiVersion: v2\nname: local\nversion: 0.1.0\n")
 				writeFixture(t, root, "chart/values.yaml", "value: original\n")
 				writeFixture(t, root, "chart/override.yaml", "value: overridden\n")
