@@ -14,7 +14,7 @@ The core host owns comparison and reports. `gitops-preview-flux` owns Flux, Git,
 It is built for Kubernetes platform teams reviewing GitOps pull requests where the source YAML is not the whole story: Flux `Kustomization` dependencies, `HelmRelease` rendering, external `GitRepository` sources, Crossplane composition outputs, generated metadata, and multi-cluster layouts all affect the final manifests.
 
 > [!NOTE]
-> `v0.2.0-rc.1` is a release candidate, not the latest stable release. Pin this version for reproducible evaluation; see the [release notes and Go API migration](docs/releases/v0.2.0-rc.1.md). Workflows and report details may continue to evolve.
+> `v0.2.0-rc.2` is a release candidate, not the latest stable release. Pin this version for reproducible evaluation; see the [release notes](docs/releases/v0.2.0-rc.2.md) and [Go API migration](docs/releases/v0.2.0-rc.1.md). Workflows and report details may continue to evolve.
 
 ---
 
@@ -106,11 +106,11 @@ The Go module and GitHub source repository are `github.com/tobiash/gitops-previe
 After the RC tag is published, install all commands at the same explicit version:
 
 ```bash
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview@v0.2.0-rc.1
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-flux@v0.2.0-rc.1
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-crossplane@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview@v0.2.0-rc.2
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-flux@v0.2.0-rc.2
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-crossplane@v0.2.0-rc.2
 # Optional compatibility command:
-go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.2
 ```
 
 `@latest` prefers a stable Go module version when one exists; it does not select this RC over an existing stable release. GitHub's `/releases/latest` likewise excludes prereleases. Use the explicit RC tag until stable promotion.
@@ -411,7 +411,7 @@ Use the action to review GitOps pull requests automatically. The release-tagged 
   with:
     fetch-depth: 0 # required for git-aware diffing
 
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
@@ -426,7 +426,7 @@ Use the action to review GitOps pull requests automatically. The release-tagged 
 ### Rich HTML report artifact
 
 ```yaml
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
@@ -442,7 +442,7 @@ The action uploads the report as an artifact and exposes:
 ### Deploy report to GitHub Pages
 
 ```yaml
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
