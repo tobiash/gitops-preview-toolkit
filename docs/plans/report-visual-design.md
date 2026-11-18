@@ -65,11 +65,12 @@ with session-only fallback. Clipboard errors and keyboard controls are retained.
 
 ## Verification and visual critique
 
-- Node: all original 14 regressions plus seven meaningful additions pass (21 total):
+- Node: all original 14 regressions plus eight meaningful additions pass (22 total):
   inline tiny evidence, truncation/literal hostile text, bounded/global counts,
   whole-cluster policy scope, exact-name browsing/clear scope, retained selection
   and refs, error/empty language, supplied-only context, separate AI provenance,
-  and individual review of large evidence even with few resources.
+  individual review of large evidence even with few resources, and mixed
+  policy/AI/unknown classification provenance without a deterministic blanket claim.
 - Go: `GOMAXPROCS=2 go test -p 1 ./pkg/githubaction ./internal/cli/...
   ./cmd/gitops-preview/... ./cmd/fmp/...` passes. The two command packages have no
   direct tests; the CLI implementation's tests are in `internal/cli`.

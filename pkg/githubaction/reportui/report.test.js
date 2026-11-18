@@ -289,7 +289,7 @@ test("empty/error overview makes no policy or completeness success claim", async
 	const env = await runtime("#overview", [], new Map(), false, { status: "error", diffTruncated: true, warnings: ["Render unavailable"] });
 	assert.equal(env.app.querySelectorAll(".resource-card").length, 0);
 	assert.match(env.app.querySelector(".empty-state").textContent, /could not complete/);
-	assert.match(env.app.querySelector(".cluster-findings").querySelectorAll("p")[2].textContent, /does not establish successful/);
+	assert.ok(env.app.querySelector(".cluster-findings").querySelectorAll("p").some(p => /does not establish successful/.test(p.textContent)));
 	assert.match(env.header["report-facts"].children[0].textContent, /truncated/);
 	assert.match(env.app.querySelector(".warning-card").querySelector("small").textContent, /Render unavailable/);
 });
@@ -337,4 +337,36 @@ test("only supplied resource context is shown globally; AI remains separately at
 	assert.equal(findings.querySelectorAll(".ai-card").length, 0);
 	env.navigate("#resource/0");
 	assert.equal(env.app.querySelectorAll(".supplied-resource-context").length, 0);
+});
+
+test("mixed cluster classifications preserve policy, AI and unknown provenance without a deterministic blanket claim", async () => {
+	const env = await runtime("#overview", resources, new Map(), false, {}, {
+		classifications: [
+			{ id: "rule", cluster: "production", provenance: "policy" },
+			{ ID: "generated-finding", Cluster: "production", Provenance: "ai" },
+			{ id: "external-finding", cluster: "production", provenance: "external <source>" },
+			{ id: "legacy-finding", cluster: "production" },
+		],
+		violations: [{ id: "violation", cluster: "production", severity: "error" }],
+	}, { provider: "provider", model: "model", summary: "Separate assessment" });
+	const findings = env.app.querySelector(".cluster-findings");
+	const rows = findings.querySelectorAll(".cluster-finding-row");
+	const row = text => rows.find(r => r.querySelector("code").textContent === text);
+	const text = node => [node.textContent, ...node.children.map(text)].join(" ");
+	assert.equal(findings.querySelector("h2").textContent, "Cluster-wide findings");
+	assert.equal(findings.querySelector(".cluster-finding-heading").querySelector("span").textContent, "Whole cluster");
+	assert.equal(row("policy: rule").querySelector(".finding-source").textContent, "Policy classification");
+	assert.equal(row("ai: generated-finding").querySelector(".finding-source").textContent, "AI classification");
+	assert.doesNotMatch(text(row("ai: generated-finding")), /deterministic|policy/i);
+	for (const id of ["external <source>: external-finding", "unattributed: legacy-finding"]) {
+		assert.equal(row(id).querySelector(".finding-source").textContent, "Classification · unknown provenance");
+		assert.doesNotMatch(text(row(id)), /deterministic|policy/i);
+	}
+	assert.equal(row("violation").querySelector(".finding-source").textContent, "Policy violation");
+	assert.doesNotMatch(text(findings), /Source: deterministic policy output|These policy findings/);
+	assert.match(findings.querySelector(".findings-provenance").textContent, /Missing or unrecognized classification provenance is unknown/);
+	assert.equal(env.app.querySelector(".ai-card").querySelector("p").textContent, "Separate assessment");
+	assert.equal(findings.querySelectorAll(".ai-card").length, 0);
+	env.navigate("#resource/0");
+	assert.equal(env.app.querySelectorAll(".cluster-finding-row").length, 0);
 });

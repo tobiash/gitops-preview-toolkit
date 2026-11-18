@@ -265,21 +265,22 @@
 		const signals = policySignals();
 		const section = el("section", { id: "cluster-findings", class: "cluster-findings", tabindex: "-1" }, [
 			el("h2", { text: "Cluster-wide findings" }),
-			el("p", { class: "findings-explanation", text: signals.some(s => s.resourceContext) ? "These policy findings are presented at whole-cluster scope, separate from individual resource review. Any supplied resource context is shown explicitly; no additional resource matches are inferred." : "These policy findings apply to the whole named cluster, not an individual resource. No resource-level attribution is supplied." }),
+			el("p", { class: "findings-explanation", text: signals.some(s => s.resourceContext) ? "These classifications and violations are presented at whole-cluster scope, separate from individual resource review. Any supplied resource context is shown explicitly; no additional resource matches are inferred." : "These classifications and violations apply to the whole named cluster, not an individual resource. No resource-level attribution is supplied." }),
+			el("p", { class: "scope-note", text: "Classification sources are labeled as policy, AI, or unknown provenance. Policy violations are identified separately." }),
 			el("p", { class: "scope-note", text: "Opening a cluster shows its complete change inventory, not resources claimed to have triggered a finding." }),
 		]);
 		const groups = groupPolicySignalsByCluster(signals);
 		if (!groups.size) section.append(el("p", { class: "scope-note", text: "No cluster-wide findings supplied. This does not establish successful policy evaluation or approval." }));
 		for (const [cluster, signals] of groups) {
 			const group = el("section", { class: "cluster-finding-group" }, [el("div", { class: "cluster-finding-heading" }, [el("h3", { text: cluster }), el("span", { text: "Whole cluster" })])]);
-			for (const signal of sortedPolicySignals(signals)) group.append(el("div", { class: "cluster-finding-row", "data-severity": signal.severity }, [el("span", { class: "finding-severity", text: signal.severity }), el("code", { text: signal.text }), ...(signal.message ? [el("small", { text: signal.message })] : []), ...(signal.resourceContext ? [el("small", { class: "supplied-resource-context", text: `Supplied resource context: ${signal.resourceContext}` })] : [])]));
+			for (const signal of sortedPolicySignals(signals)) group.append(el("div", { class: "cluster-finding-row", "data-severity": signal.severity }, [el("span", { class: "finding-severity", text: signal.severity }), el("code", { text: signal.text }), el("small", { class: "finding-source", text: signal.source }), ...(signal.message ? [el("small", { text: signal.message })] : []), ...(signal.resourceContext ? [el("small", { class: "supplied-resource-context", text: `Supplied resource context: ${signal.resourceContext}` })] : [])]));
 			group.append(el("a", { class: "cluster-browse", href: `#resources?exactCluster=${encodeURIComponent(cluster)}`, text: `Browse ${cluster} changes` }));
 			section.append(group);
 		}
 		const labels = suggestedLabelPills();
 		if (data.policies.policyFailures?.length) section.append(el("h3", { text: "Reported policy failure reasons" }), ...data.policies.policyFailures.map(text => el("p", { class: "scope-note", text })));
 		if (labels) section.append(el("h3", { text: "Suggested report labels" }), labels);
-		section.append(el("p", { class: "findings-provenance", text: "Source: deterministic policy output. Provenance is shown as supplied; unattributed findings have no supplied provenance. Policy outcome is separate; severity is not a failure verdict." }));
+		section.append(el("p", { class: "findings-provenance", text: "Only classifications with policy provenance are identified as policy classifications. AI classifications are generated review aids, distinct from policy violations and the separately rendered AI Assessment. Missing or unrecognized classification provenance is unknown, not assumed to be policy output. Policy outcome is separate; severity is not a failure verdict." }));
 		return section;
 	}
 
@@ -331,11 +332,13 @@
 	function policySignals() {
 		const signals = [];
 		for (const item of data.policies.classifications || []) {
+			const provenance = item.provenance || item.Provenance;
 			signals.push({
 				cluster: item.cluster || item.Cluster || "default",
 				priority: item.priority || item.Priority || 0,
 				severity: item.severity || item.Severity || "info",
-				text: `${item.provenance || item.Provenance || "unattributed"}: ${item.id || item.ID || "classification"}`,
+				text: `${provenance || "unattributed"}: ${item.id || item.ID || "classification"}`,
+				source: provenance === "policy" ? "Policy classification" : provenance === "ai" ? "AI classification" : "Classification · unknown provenance",
 				message: item.message || item.Message,
 				resourceContext: suppliedResourceContext(item),
 			});
@@ -346,6 +349,7 @@
 				priority: item.priority || item.Priority || 0,
 				severity: item.severity || item.Severity || "error",
 				text: item.id || item.ID || item.message || "violation",
+				source: "Policy violation",
 				message: (item.id || item.ID) && (item.message || item.Message),
 				resourceContext: suppliedResourceContext(item),
 			});
@@ -978,7 +982,7 @@
 			]),
 			diffStats(res),
 			el("section", { class: "detail-panel" }, [diffView(res, view)]),
-			el("p", { class: "resource-policy-note", text: "Cluster-wide policy findings are in Overview, not attributed to this resource." }),
+			el("p", { class: "resource-policy-note", text: "Cluster-wide classifications and policy violations are in Overview, not attributed to this resource." }),
 		);
 	}
 

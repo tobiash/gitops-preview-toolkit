@@ -4,7 +4,7 @@ Open the generated HTML file in a modern browser. All report assets are inline;
 reviewing does not require a server or network connection.
 
 - **Overview** separates resource counts, base/target context, report status,
-  deterministic policy findings, AI Assessment, and your local review progress.
+  cluster-wide classifications and policy violations, AI Assessment, and your local review progress.
   An absent policy failure is not evidence that policies were evaluated or passed.
 - **Review** opens a compact list beside the selected manifest diff. On narrow
   screens, **Back to resources** returns from detail to the list. Only diff panels
@@ -46,7 +46,10 @@ is retained; the preview is not a consequential-change or risk ranking.
 
 **Cluster-wide findings** have their own report-level column/section, never a
 place under the selected resource. Findings show the whole named cluster and
-supplied provenance (or “unattributed”). Optional resource identity fields are
+supplied provenance (or “unattributed”). Classifications with `policy` provenance
+are labeled policy classifications; `ai` provenance is labeled AI classification.
+Missing/unrecognized provenance remains unknown, never assumed deterministic.
+Policy violations are identified separately. Optional resource identity fields are
 shown only as explicitly supplied source context in that global section; no
 matches are inferred and no finding is moved into selected-resource detail.
 Browse actions open that cluster's
