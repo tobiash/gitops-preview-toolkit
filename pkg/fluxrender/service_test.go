@@ -619,7 +619,7 @@ func TestOpenOptionsAndLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unsupported := input(t, ks.YAML+"  namePrefix: unsupported\n")
+	unsupported := input(t, ks.YAML+"  decryption: {provider: sops}\n")
 	r = expandSession(t, s, strict.Session, unsupported)
 	if len(r.Diagnostics) != 1 || !strings.Contains(r.Diagnostics[0].Message, "strict inputs") {
 		t.Fatalf("strict inputs ignored: %+v", r)

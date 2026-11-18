@@ -8,6 +8,7 @@ import (
 
 	fluxksv1 "github.com/fluxcd/kustomize-controller/api/v1"
 	"github.com/go-logr/logr"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/build"
 	"github.com/tobiash/gitops-preview-toolkit/pkg/expander"
 	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -79,6 +80,15 @@ func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.Expa
 		dp := expander.DiscoveredPath{
 			Path:     path,
 			Producer: fmt.Sprintf("Kustomization %s/%s", ks.Namespace, ks.Name),
+			Flux: &build.FluxOptions{
+				Namespace:      ks.Spec.TargetNamespace,
+				NamePrefix:     ks.Spec.NamePrefix,
+				NameSuffix:     ks.Spec.NameSuffix,
+				Patches:        ks.Spec.Patches,
+				Images:         ks.Spec.Images,
+				Components:     ks.Spec.Components,
+				CommonMetadata: ks.Spec.CommonMetadata,
+			},
 		}
 		if ks.Spec.SourceRef.Kind != "" && ks.Spec.SourceRef.Kind != "GitRepository" {
 			errs = append(errs, fmt.Errorf("%s: unsupported source kind %q", dp.Producer, ks.Spec.SourceRef.Kind))
@@ -93,6 +103,14 @@ func (e *Expander) Expand(ctx context.Context, r *render.Render) (*expander.Expa
 			for key, value := range ks.Spec.PostBuild.Substitute {
 				dp.Substitutions[key] = value
 			}
+		}
+		if metadata := dp.Flux.CommonMetadata; metadata != nil && len(metadata.Labels)+len(metadata.Annotations) == 0 {
+			dp.Flux.CommonMetadata = nil
+		}
+		hasNameOverrides := dp.Flux.Namespace != "" || dp.Flux.NamePrefix != "" || dp.Flux.NameSuffix != ""
+		hasTransforms := len(dp.Flux.Patches)+len(dp.Flux.Images)+len(dp.Flux.Components) > 0
+		if !hasNameOverrides && !hasTransforms && dp.Flux.CommonMetadata == nil {
+			dp.Flux = nil
 		}
 
 		if e.resolver != nil && ks.Spec.SourceRef.Kind == "GitRepository" {
@@ -122,12 +140,6 @@ func unsupportedInputs(ks *fluxksv1.Kustomization) error {
 		used  bool
 	}{
 		{"postBuild.substituteFrom", ks.Spec.PostBuild != nil && len(ks.Spec.PostBuild.SubstituteFrom) > 0},
-		{"patches", len(ks.Spec.Patches) > 0},
-		{"images", len(ks.Spec.Images) > 0},
-		{"components", len(ks.Spec.Components) > 0},
-		{"namePrefix", ks.Spec.NamePrefix != ""},
-		{"nameSuffix", ks.Spec.NameSuffix != ""},
-		{"commonMetadata", ks.Spec.CommonMetadata != nil},
 		{"decryption", ks.Spec.Decryption != nil},
 	} {
 		if input.used {

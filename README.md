@@ -14,7 +14,7 @@ The core host owns comparison and reports. `gitops-preview-flux` owns Flux, Git,
 It is built for Kubernetes platform teams reviewing GitOps pull requests where the source YAML is not the whole story: Flux `Kustomization` dependencies, `HelmRelease` rendering, external `GitRepository` sources, Crossplane composition outputs, generated metadata, and multi-cluster layouts all affect the final manifests.
 
 > [!NOTE]
-> `v0.2.0-rc.1` is a release candidate, not the latest stable release. Pin this version for reproducible evaluation; see the [release notes and Go API migration](docs/releases/v0.2.0-rc.1.md). Workflows and report details may continue to evolve.
+> `v0.2.0-rc.2` is a release candidate, not the latest stable release. Pin this version for reproducible evaluation; see the [release notes](docs/releases/v0.2.0-rc.2.md) and [Go API migration](docs/releases/v0.2.0-rc.1.md). Workflows and report details may continue to evolve.
 
 ---
 
@@ -68,6 +68,7 @@ The report includes:
 ## Key features
 
 - **Flux-aware rendering** — discovers `Kustomization.spec.path`, follows Flux dependency patterns, and can resolve external `GitRepository` sources.
+- **ResourceSet fan-out** — expands Flux ResourceSets from inline inputs, Static providers or pre-baked provider snapshots, then follows supported generated Kustomizations and HelmReleases. Try the [local two-region example and support boundaries](docs/examples/resourcesets/README.md).
 - **HelmRelease support** — renders `HelmRelease` resources through the Helm SDK, including post-renderers and `commonMetadata`.
 - **Crossplane composition preview** — opt-in expansion through a pinned external controller engine, with logical identities for unnamed outputs and separate evaluation evidence.
 - **Git-aware diffs** — compare `HEAD`, branches, commits, local paths, or your dirty worktree.
@@ -105,11 +106,11 @@ The Go module and GitHub source repository are `github.com/tobiash/gitops-previe
 After the RC tag is published, install all commands at the same explicit version:
 
 ```bash
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview@v0.2.0-rc.1
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-flux@v0.2.0-rc.1
-go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-crossplane@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview@v0.2.0-rc.2
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-flux@v0.2.0-rc.2
+go install github.com/tobiash/gitops-preview-toolkit/cmd/gitops-preview-crossplane@v0.2.0-rc.2
 # Optional compatibility command:
-go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.1
+go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.2
 ```
 
 `@latest` prefers a stable Go module version when one exists; it does not select this RC over an existing stable release. GitHub's `/releases/latest` likewise excludes prereleases. Use the explicit RC tag until stable promotion.
@@ -120,6 +121,33 @@ go install github.com/tobiash/gitops-preview-toolkit/cmd/fmp@v0.2.0-rc.1
 - Install the three executables together. Defaults resolve plugins beside the host executable, then on `PATH`. `--flux-plugin` and `--crossplane-plugin` select trusted executable overrides; repository configuration cannot select commands.
 - Helm rendering uses the SDK in the Flux plugin; a standalone `helm` executable is not required. Unset Helm settings use the plugin's environment defaults.
 - Release archives `gitops-preview-toolkit_<tag>_<os>_<arch>.tar.gz` contain the core, both plugins, and `fmp`. Compatibility `fmp_<tag>_<os>_<arch>.tar.gz` archives include `fmp` and both plugins. The GitHub Action downloads and caches the complete toolkit.
+
+### First-run preflight
+
+```bash
+gitops-preview doctor . -k clusters/production
+gitops-preview doctor . --output json
+# Only when explicitly opting into trusted Crossplane prerequisites:
+gitops-preview doctor . -k clusters/production --crossplane \
+  --crossplane-engine "$HOME/.local/bin/crossplane-core"
+```
+
+Doctor reports configuration discovery, effective root directory existence, plugin
+discovery and name/protocol compatibility. It starts trusted plugins for `Describe`
+only, without rendering, downloading sources/charts, opening a render session or
+running composition functions. Crossplane engine discovery and `--version` run only
+with `--crossplane`; repository `crossplane.enabled` never grants execution.
+
+Default output is deterministic text; `--output json` emits one document even on
+failure. Exit codes are **0** for passed preflight (warnings/skipped checks allowed),
+**2** for configuration/root/invocation problems, and **3** for missing or incompatible
+dependencies. Configuration errors take precedence if both classes occur.
+
+A pass is **not** full render validation. Docker access, function images/development
+targets, remote sources, chart availability and unsupported manifest inputs are not
+validated. Follow with `gitops-preview test .` or `gitops-preview render .`, passing
+the same roots/config/runtime flags. Those deeper checks may acquire sources and
+execute explicitly enabled functions. See the [rendering support matrix](docs/rendering-support.md).
 
 ### Configuration and Crossplane
 
@@ -383,7 +411,7 @@ Use the action to review GitOps pull requests automatically. The release-tagged 
   with:
     fetch-depth: 0 # required for git-aware diffing
 
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
@@ -398,7 +426,7 @@ Use the action to review GitOps pull requests automatically. The release-tagged 
 ### Rich HTML report artifact
 
 ```yaml
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
@@ -414,7 +442,7 @@ The action uploads the report as an artifact and exposes:
 ### Deploy report to GitHub Pages
 
 ```yaml
-- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.1
+- uses: tobiash/gitops-preview-toolkit@v0.2.0-rc.2
   with:
     repo: .
     base-ref: origin/main
@@ -545,6 +573,8 @@ Not every validation or dependency error is classified separately yet. Treat any
 If either side fails to render, fmp suppresses the entire comparison rather than reporting missing resources as deletions or an empty diff as clean. Policy and AI assessments are skipped, and the CLI/action fails. JSON failures include `complete: false`; action reports carry error status and diagnostics even when advisory `fail-on-error` behavior is disabled.
 
 Malformed manifests, duplicate output identities, failed source acquisition, unresolved sources at the discovery fixed point, and missing discovered paths are failures. Known fmp configuration files are not treated as raw manifests. Distinct Flux rendering contexts remain separate even when they use the same directory, while equivalent bootstrap paths are deduplicated.
+
+ResourceSet inputs are offline desired-state inputs: missing named providers and dynamic providers without pre-baked `status.exportedInputs` make rendering incomplete, suppressing inferred deletions. Explicit empty snapshots can retract generated outputs. ResourceSet steps, render-affecting annotation transforms and template functions outside the allowlist are unsupported. Static providers without a live UID use a stable offline ID derived from `namespace/name`, not the live UID-derived ID. ResourceSet support does not provision CAPI clusters or expand ClusterClass, ClusterResourceSet or HelmChartProxy controllers, and does not imply full krops/Flux parity (including Flux decryption). See the [ResourceSet guide](docs/examples/resourcesets/README.md) for details.
 
 Completeness covers the configured render scope and detected failures. It does not guarantee full Flux feature parity, live-cluster validity, or runtime behavior. Rendering may access remote sources, credentials, or external programs according to your configuration; it is not sandboxed.
 

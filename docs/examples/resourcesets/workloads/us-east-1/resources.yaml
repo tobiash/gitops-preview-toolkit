@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps-us-east-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: regional-settings
+data:
+  region: us-east-1
+  message: Hello from the US

@@ -112,15 +112,7 @@ func TestLocalSnapshotUnsupportedFluxInputs(t *testing.T) {
 	}{
 		{"substituteFrom required", "Kustomization", "  postBuild:\n    substituteFrom: [{kind: Secret, name: missing, optional: false}]\n"},
 		{"substituteFrom optional", "Kustomization", "  postBuild:\n    substituteFrom: [{kind: ConfigMap, name: existing, optional: true}]\n"},
-		{"patches", "Kustomization", "  patches: [{patch: 'metadata: {name: changed}'}]\n"},
-		{"images", "Kustomization", "  images: [{name: app, newTag: changed}]\n"},
-		{"components", "Kustomization", "  components: [component]\n"},
-		{"namePrefix", "Kustomization", "  namePrefix: changed-\n"},
-		{"nameSuffix", "Kustomization", "  nameSuffix: -changed\n"},
-		{"commonMetadata", "Kustomization", "  commonMetadata: {labels: {changed: 'true'}}\n"},
 		{"decryption", "Kustomization", "  decryption: {provider: sops}\n"},
-		{"valuesFiles", "HelmRelease", "      valuesFiles: [chart/override.yaml]\n"},
-		{"ignoreMissingValuesFiles", "HelmRelease", "      ignoreMissingValuesFiles: true\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()

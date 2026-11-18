@@ -36,22 +36,24 @@ type Runner struct {
 }
 
 type RenderTask struct {
-	values          chartcommon.Values
-	chart           string
-	version         string
-	repo            repo.Entry
-	localChartPath  string
-	localSourceRoot string
-	releaseName     string
-	namespace       string
-	origin          fmprender.Provenance
-	createNamespace bool
-	skipCRDs        bool
-	replace         bool
-	disableHooks    bool
-	includeCRDs     bool
-	isOCI           bool
-	postRenderer    PostRenderer
+	valuesFiles              []string
+	ignoreMissingValuesFiles bool
+	values                   chartcommon.Values
+	chart                    string
+	version                  string
+	repo                     repo.Entry
+	localChartPath           string
+	localSourceRoot          string
+	releaseName              string
+	namespace                string
+	origin                   fmprender.Provenance
+	createNamespace          bool
+	skipCRDs                 bool
+	replace                  bool
+	disableHooks             bool
+	includeCRDs              bool
+	isOCI                    bool
+	postRenderer             PostRenderer
 }
 
 // SetLocalOnly requires existing local charts confined to root, with no acquisition.
@@ -251,6 +253,9 @@ func (r *Runner) renderChart(ctx context.Context, t *RenderTask) (resmap.ResMap,
 			return nil, err
 		}
 		ch = loaded
+	}
+	if err := applyChartValuesFiles(ch, t); err != nil {
+		return nil, fmt.Errorf("applying chart values files: %w", err)
 	}
 	rel, err := install.RunWithContext(ctx, ch, t.values)
 	if err != nil {

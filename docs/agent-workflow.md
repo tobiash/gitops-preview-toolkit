@@ -180,6 +180,27 @@ cover custom generators/transformers/validators, Helm generators, remote schema
 references and external postrenderers. This is a supported-input boundary, not
 a guarantee of full Flux-controller parity.
 
+Flux `fluxcd.controlplane.io/v1` ResourceSets can fan out inline inputs, Static
+provider defaults, or pre-baked `status.exportedInputs` snapshots into desired
+resources and supported Kustomization/HelmRelease descendants. Providers are
+selected within the ResourceSet namespace; live provider discovery is not run.
+Missing named providers and dynamic providers without snapshots make rendering
+incomplete, so preview publishes no authoritative changes or handles and cannot
+infer deletions. An explicit empty snapshot can legitimately retract outputs.
+Changed inputs are reevaluated even when generated resource identities stay the
+same. Static provider IDs use a supplied UID when present, otherwise an offline
+`namespace/name` identity; this is not the live API-server UID-derived ID.
+
+ResourceSet steps, render-affecting annotation transforms (`copyFrom`,
+`convertKubeConfigFrom`, `checksumFrom`) and template functions outside the bounded
+allowlist are unsupported. ResourceSet expansion does not provision CAPI clusters
+or expand ClusterClass, CAPI ClusterResourceSet or HelmChartProxy controllers.
+Regions/namespaces do not imply separate cluster inventories. Explicit cloud
+definitions remain ordinary previewable manifests. This is not full krops parity;
+the Flux decryption and other supported-input limits above still apply. Use the
+[local two-region example and complete function allowlist](examples/resourcesets/README.md)
+to exercise ResourceSet rendering without a live cluster.
+
 Required SOPS decryption is denied in both profiles. Repository AI configuration
 is ignored with diagnostics; no nested model calls occur. Repository Helm
 credential/cache overrides are ignored. No tool applies manifests or publishes

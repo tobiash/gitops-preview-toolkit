@@ -226,9 +226,6 @@ func (s *expandState) parseHelmRelease(res *resource.Resource) (*helmv2.HelmRele
 	// Legacy previews retain the shipped behavior; strict snapshots reject
 	// known unsupported chart inputs instead of claiming an authoritative render.
 	if s.strictInputs {
-		if len(hr.Spec.Chart.Spec.ValuesFiles) > 0 || hr.Spec.Chart.Spec.IgnoreMissingValuesFiles {
-			return nil, fmt.Errorf("strict inputs: HelmRelease %s/%s chart.spec.valuesFiles and ignoreMissingValuesFiles are unsupported", hr.Namespace, hr.Name)
-		}
 		if hr.Spec.ChartRef != nil {
 			return nil, fmt.Errorf("strict inputs: HelmRelease %s/%s spec.chartRef is unsupported", hr.Namespace, hr.Name)
 		}
@@ -305,21 +302,23 @@ func (s *expandState) renderAllCharts(ctx context.Context) (resmap.ResMap, []err
 		install := h.GetInstall()
 		postRenderer := buildPostRenderers(h)
 		tasks = append(tasks, RenderTask{
-			values:          values,
-			chart:           chartName,
-			version:         chartVersion,
-			repo:            repo.Entry{URL: src.url, Name: fmt.Sprintf("%s-%s", h.Namespace, h.Name)},
-			localChartPath:  src.localPath,
-			localSourceRoot: src.localRoot,
-			releaseName:     releaseName,
-			namespace:       namespace,
-			origin:          render.HelmReleaseProvenance(h.Namespace, h.Name),
-			skipCRDs:        install.SkipCRDs,
-			replace:         install.Replace,
-			disableHooks:    install.DisableHooks,
-			createNamespace: install.CreateNamespace,
-			isOCI:           src.isOCI,
-			postRenderer:    postRenderer,
+			valuesFiles:              h.Spec.Chart.Spec.ValuesFiles,
+			ignoreMissingValuesFiles: h.Spec.Chart.Spec.IgnoreMissingValuesFiles,
+			values:                   values,
+			chart:                    chartName,
+			version:                  chartVersion,
+			repo:                     repo.Entry{URL: src.url, Name: fmt.Sprintf("%s-%s", h.Namespace, h.Name)},
+			localChartPath:           src.localPath,
+			localSourceRoot:          src.localRoot,
+			releaseName:              releaseName,
+			namespace:                namespace,
+			origin:                   render.HelmReleaseProvenance(h.Namespace, h.Name),
+			skipCRDs:                 install.SkipCRDs,
+			replace:                  install.Replace,
+			disableHooks:             install.DisableHooks,
+			createNamespace:          install.CreateNamespace,
+			isOCI:                    src.isOCI,
+			postRenderer:             postRenderer,
 		})
 	}
 

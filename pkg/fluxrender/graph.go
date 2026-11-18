@@ -125,12 +125,27 @@ func (s *Service) expand(ctx context.Context, se *session, inputs []plugin.Resou
 				isKS = false
 			}
 			isHR := gvk.Group == "helm.toolkit.fluxcd.io" && gvk.Kind == "HelmRelease" && se.config.Helm
-			if !isKS && !isHR {
+			isResourceSet := gvk.Group == "fluxcd.controlplane.io" && gvk.Kind == "ResourceSet"
+			if !isKS && !isHR && !isResourceSet {
 				continue
 			}
 			trigger, err := plugin.ParseResource([]byte(control.MustYaml()), plugin.Provenance{})
 			if err != nil {
 				return nil, err
+			}
+			if isResourceSet {
+				expansion := plugin.Expansion{ID: "flux:resourceset:" + trigger.ID, Trigger: trigger.ID, Resources: []plugin.Resource{}}
+				resources, err := renderResourceSet(ctx, control, inventory)
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					diagnostics = append(diagnostics, diagnostic("render-error", err, trigger.ID))
+				} else {
+					expansion.Resources = resources
+				}
+				next = append(next, expansion)
+				continue
 			}
 			inputKey := ""
 			if isHR {
@@ -423,9 +438,14 @@ func (s *Service) buildPath(ctx context.Context, se *session, path expander.Disc
 		if !shouldBuild(build) {
 			return nil
 		}
+		if path.Flux != nil {
+			return built.AddFluxPathWithProducer(fs, dir, path.Producer, *path.Flux)
+		}
 		return built.AddPathWithProducer(fs, dir, path.Producer)
 	}
-	if se.options.Recursive {
+	// Flux generates one overlay for plain manifests, recursively including
+	// children; do not independently rebuild those children with the same inputs.
+	if se.options.Recursive && path.Flux == nil {
 		if err := build.WalkPaths(fs, full, visit); err != nil {
 			return nil, err
 		}
@@ -435,8 +455,13 @@ func (s *Service) buildPath(ctx context.Context, se *session, path expander.Disc
 	if err := built.ApplySubstitutionsToNew(0, path.Producer, path.Substitutions); err != nil {
 		return nil, err
 	}
-	if path.Namespace != "" {
+	if path.Namespace != "" && path.Flux == nil {
 		if err := built.ApplyNamespaceToNew(0, path.Namespace); err != nil {
+			return nil, err
+		}
+	}
+	if path.Flux != nil {
+		if err := build.ApplyCommonMetadata(built.Render, path.Flux.CommonMetadata); err != nil {
 			return nil, err
 		}
 	}

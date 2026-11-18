@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/tobiash/gitops-preview-toolkit/pkg/build"
 	"github.com/tobiash/gitops-preview-toolkit/pkg/render"
 	"sigs.k8s.io/kustomize/api/resmap"
 )
@@ -24,6 +25,8 @@ type DiscoveredPath struct {
 	Producer string
 	// Substitutions contains Flux postBuild inline substitutions for this path.
 	Substitutions map[string]string
+	// Flux contains build-time overrides from the producing Flux Kustomization.
+	Flux *build.FluxOptions `json:",omitempty"`
 }
 
 // ExpandResult holds the output of an expander.

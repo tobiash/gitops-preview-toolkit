@@ -72,7 +72,12 @@ func Run(name, buildVersion string) int {
 		Use:   name,
 		Short: "gitops-preview-toolkit — render and diff GitOps resources",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if cmd.Flags().Lookup("output") != nil && outputFormat != "yaml" && outputFormat != "json" {
+			if cmd.Name() == "doctor" {
+				outputFormat = cmd.Flags().Lookup("output").Value.String()
+				if outputFormat != "text" && outputFormat != "json" {
+					return fmt.Errorf("%w: output must be text or json", ErrUserInput)
+				}
+			} else if cmd.Flags().Lookup("output") != nil && outputFormat != "yaml" && outputFormat != "json" {
 				return fmt.Errorf("%w: output must be yaml or json", ErrUserInput)
 			}
 			if cmd.Name() == "diff" && diffHTML && outputFormat == "json" {
@@ -417,6 +422,7 @@ Use --init to generate a .gitops-preview.yaml config file in the repo.`,
 
 	rootCmd.SilenceErrors = true
 	rootCmd.SilenceUsage = true
+	rootCmd.AddCommand(doctorCmd(&jsonOutput))
 	rootCmd.AddCommand(renderCmd, diffCmd, testCmd, getCmd, ciCmd, detectCmd, versionCmd, githubActionCmd(), describeCmd, agentCmd(), mcpCmd())
 
 	rootCmd.SetContext(ctx)
