@@ -6,7 +6,7 @@ reviewing does not require a server or network connection.
 - **Overview** separates resource counts, base/target context, report status,
   deterministic policy findings, AI Assessment, and your local review progress.
   An absent policy failure is not evidence that policies were evaluated or passed.
-- **Resources** opens a compact list beside the selected manifest diff. On narrow
+- **Review** opens a compact list beside the selected manifest diff. On narrow
   screens, **Back to resources** returns from detail to the list. Only diff panels
   scroll horizontally. Lists can be grouped by cluster, producer, or resource kind;
   grouping does not imply application ownership or equivalent changes.
@@ -21,6 +21,44 @@ reviewing does not require a server or network connection.
 - **Mark reviewed** is a local annotation, not approval or a policy result.
   **Unreviewed only** advances to the next remaining resource (or the preceding
   resource at the end) when marking reviewed. Reload resumes saved progress.
+
+## Overview and scope
+
+The shared header keeps **Base → Target** visible at every width. Open its
+native disclosure to read complete, wrapping refs; shortened summaries never
+replace the full values. Overview / Review switches reading scale without
+discarding the current review selection, search, grouping or diff mode.
+
+The connected green/blue/berry totals band and proportional strips encode
+added/modified/deleted resource counts, not risk or approval. Counts come from
+the indexed inventory and ignore Review filters. Cluster rows show their actual
+counts and open their complete inventory. These explicit cluster actions clear
+the previous search/review/group/diff scope and use an exact cluster name (the
+`exactCluster` hash parameter); similarly named clusters are not included. Clear
+filters removes that scope. Existing resource routes and query filters still work.
+
+Reports with one or two resources and at most 80 available diff rows expose all
+those rows directly in Overview, with an immediate evidence index. A small
+inventory with larger evidence uses individual Review; rows are never sliced to
+fit Overview. Larger reports show at most eight
+inventory entries, the shown/total count, and a link to all changes. Source order
+is retained; the preview is not a consequential-change or risk ranking.
+
+**Cluster-wide findings** have their own report-level column/section, never a
+place under the selected resource. Findings show the whole named cluster and
+supplied provenance (or “unattributed”). Optional resource identity fields are
+shown only as explicitly supplied source context in that global section; no
+matches are inferred and no finding is moved into selected-resource detail.
+Browse actions open that cluster's
+inventory, not a claimed set of matching resources. Suggested labels remain
+report-wide. Severity does not establish policy failure; no supplied failures
+does not establish successful evaluation. AI Assessment remains a separately
+attributed review aid, not a deterministic policy result.
+
+Small/empty/error reports use the same production data path. An error report
+with no resource evidence explicitly does not establish that there are no changes.
+Truncation notices describe unavailable evidence; no semantic conclusions are
+inferred from visible diff lines.
 
 ## Local storage and themes
 

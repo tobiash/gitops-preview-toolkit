@@ -43,18 +43,23 @@ const resources = [
 	apiVersion: "v1", producer: "XR apps/parent", addedLines: 0, deletedLines: 0, diffRows: [],
 }));
 
-async function runtime(hash, inputResources = resources, storage = new Map(), blocked = false, meta = {}) {
+async function runtime(hash, inputResources = resources, storage = new Map(), blocked = false, meta = {}, policies = {}, ai) {
 	const app = new Element("main");
 	const announcement = new Element("div");
 	const data = {
-		meta, summary: { total: inputResources.length }, policies: {}, resources: inputResources,
+		meta, summary: { total: inputResources.length }, policies, resources: inputResources, ai,
 	};
+	const nav = new Element("a");
+	nav.dataset = { route: "resources" };
+	const overviewNav = new Element("a");
+	overviewNav.dataset = { route: "overview" };
+	const header = Object.fromEntries(["base-ref", "target-ref", "base-ref-full", "target-ref-full", "report-facts"].map(id => [id, new Element("div")]));
 	const document = {
-		getElementById: (id) => id === "app" ? app : id === "fmp-report-data" ? { textContent: JSON.stringify(data) } : id === "review-announcement" ? announcement : app.querySelectorAll("input").concat(app.querySelectorAll("button"), app.querySelectorAll("select")).find(e => e.id === id),
+		getElementById: (id) => id === "app" ? app : id === "fmp-report-data" ? { textContent: JSON.stringify(data) } : id === "review-announcement" ? announcement : header[id] || app.querySelectorAll("input").concat(app.querySelectorAll("button"), app.querySelectorAll("select")).find(e => e.id === id),
 		createElement: (tag) => new Element(tag),
 		createTextNode: (text) => Object.assign(new Element("text"), { textContent: text }),
-		querySelectorAll: () => [],
-		querySelector: () => null,
+		querySelectorAll: () => [overviewNav, nav],
+		querySelector: () => nav,
 	};
 	const listeners = {}, location = { hash, href: "file:///report.html" + hash };
 	const clipboard = { writes: [], fail: false };
@@ -66,7 +71,7 @@ async function runtime(hash, inputResources = resources, storage = new Map(), bl
 		history: { replaceState(_state, _title, hash) { location.hash = hash; } },
 		window: { addEventListener(key, fn) { listeners[key] = fn; } },
 	});
-	return { app, location, listeners, storage, announcement, clipboard, navigate(hash) { location.hash = hash; listeners.hashchange(); }, key(key, extra = {}) { const event = { key, target: app, preventDefault() {}, ...extra }; listeners.keydown(event); } };
+	return { app, location, listeners, storage, announcement, clipboard, nav, header, navigate(hash) { location.hash = hash; listeners.hashchange(); }, key(key, extra = {}) { const event = { key, target: app, preventDefault() {}, ...extra }; listeners.keydown(event); } };
 }
 async function render(...args) { return (await runtime(...args)).app; }
 
@@ -237,3 +242,99 @@ for (const grouping of ["kind", "producer", "cluster"]) {
 		assert.deepEqual(env.app.querySelectorAll(".resource-card").map(card => Number(card.href.match(/resource\/(\d+)/)[1])), [1, 3]);
 	});
 }
+
+test("tiny overview exposes all supplied evidence without attributing cluster policy to resources", async () => {
+	const input = resources.slice(0, 2).map((r, index) => ({ ...r, cluster: "production", truncated: index === 1, diffRows: [{ type: "added", newLine: 1, newText: "<img src=x onerror=alert(1)>" }] }));
+	const policies = { policyFailed: false, classifications: [{ id: "replicas_change", cluster: "production", severity: "warning", provenance: "builtin" }] };
+	const env = await runtime("#overview", input, new Map(), false, { status: "changed" }, policies);
+	assert.equal(env.app.querySelectorAll(".diff").length, 2);
+	assert.equal(env.app.querySelectorAll(".small-index-row").length, 2);
+	assert.match(env.app.querySelectorAll(".diff")[1].querySelector(".empty-state").textContent, /truncated/);
+	assert.equal(env.app.querySelectorAll(".diff")[0].querySelectorAll(".cell")[1].textContent, "+<img src=x onerror=alert(1)>");
+	const findings = env.app.querySelector(".cluster-findings");
+	assert.match(findings.querySelector(".findings-explanation").textContent, /whole named cluster, not an individual resource/);
+	assert.equal(findings.querySelector("code").textContent, "builtin: replicas_change");
+	assert.match(env.app.querySelector(".review-brief").querySelectorAll("p")[1].textContent, /evaluation status unavailable/);
+	env.navigate("#resource/0");
+	assert.equal(env.app.querySelectorAll(".cluster-finding-row").length, 0);
+});
+
+test("few resources with large evidence use individual review without silently slicing rows", async () => {
+	const input = [{ ...resources[0], diffRows: Array.from({ length: 81 }, (_, i) => ({ type: "added", newLine: i + 1, newText: `literal row ${i}` })) }];
+	const env = await runtime("#overview", input);
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 1);
+	assert.equal(env.app.querySelectorAll(".diff").length, 0);
+	assert.equal(env.app.querySelectorAll(".small-index-row").length, 0);
+	env.navigate(env.app.querySelector(".resource-card").href);
+	assert.equal(env.app.querySelectorAll(".diff-row").length, 81);
+});
+
+test("overview counts are global and bounded; cluster actions clear review/search scope", async () => {
+	const input = Array.from({ length: 132 }, (_, index) => ({ ...resources[0], index, cluster: index % 2 ? "staging" : "production", action: index % 3 ? "modified" : "added" }));
+	const env = await runtime("#resource/0?query=name%3Amissing&review=unreviewed&view=split&group=kind", input, new Map(), false, {}, { classifications: [{ ID: "rule", Cluster: "staging", Severity: "error" }] });
+	const selected = env.nav.href;
+	env.navigate("#overview");
+	assert.equal(env.nav.href, selected);
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 8);
+	assert.equal(env.app.querySelectorAll(".metric-value")[0].textContent, "+44");
+	assert.equal(env.app.querySelectorAll(".metric-value")[1].textContent, "~88");
+	assert.match(env.app.querySelector(".filter-count").textContent, /8 of 132/);
+	const browse = env.app.querySelector(".cluster-findings").querySelector(".cluster-browse");
+	assert.doesNotMatch(browse.href, /view=|review=|group=/);
+	env.navigate(browse.href);
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 66);
+});
+
+test("empty/error overview makes no policy or completeness success claim", async () => {
+	const env = await runtime("#overview", [], new Map(), false, { status: "error", diffTruncated: true, warnings: ["Render unavailable"] });
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 0);
+	assert.match(env.app.querySelector(".empty-state").textContent, /could not complete/);
+	assert.match(env.app.querySelector(".cluster-findings").querySelectorAll("p")[2].textContent, /does not establish successful/);
+	assert.match(env.header["report-facts"].children[0].textContent, /truncated/);
+	assert.match(env.app.querySelector(".warning-card").querySelector("small").textContent, /Render unavailable/);
+});
+
+test("whole-cluster browse uses exact names, persists through detail, and can be cleared", async () => {
+	const input = resources.map((r, i) => ({ ...r, cluster: ["prod", "production", "prod west", "prod"][i] }));
+	const env = await runtime("#overview", input);
+	const browse = env.app.querySelectorAll(".cluster-browse").find(a => a.textContent === "Open prod inventory");
+	env.navigate(browse.href);
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 2);
+	assert.match(env.app.querySelector(".filter-count").textContent, /cluster: prod$/);
+	env.navigate(env.app.querySelector(".resource-card").href);
+	assert.match(env.app.querySelector(".resource-nav").querySelector("a").href, /exactCluster=prod$/);
+	env.app.querySelector(".clear-filters").click();
+	assert.equal(env.app.querySelectorAll(".resource-card").length, 4);
+});
+
+test("full comparison refs stay literal and Review navigation retains edited selection scope", async () => {
+	const longRef = "feature/" + "long-ref-".repeat(40) + "<script>";
+	const env = await runtime("#resource/1?view=split&group=producer", resources, new Map(), false, { base: longRef, target: "pull/42/head" });
+	assert.equal(env.header["base-ref"].textContent, longRef);
+	assert.equal(env.header["base-ref-full"].textContent, longRef);
+	const search = env.app.querySelector("input");
+	search.value = "name:named-secret";
+	search.listeners.input();
+	env.navigate("#overview");
+	assert.equal(env.nav.href, "#resource/1?view=split&query=name%3Anamed-secret&group=producer");
+	env.navigate(env.nav.href);
+	assert.equal(env.app.querySelector(".workspace-detail").querySelector("h1").textContent, "Secret connection");
+});
+
+test("only supplied resource context is shown globally; AI remains separately attributed", async () => {
+	const env = await runtime("#overview", resources, new Map(), false, {}, {
+		classifications: [{ id: "rule", provenance: "external", cluster: "prod", kind: "Secret", name: "<source-name>", message: "literal <message>" }],
+		policyFailures: ["A supplied failure reason"], policyFailed: true,
+	}, { provider: "provider", model: "model", summary: "AI <summary>", truncated: true });
+	const findings = env.app.querySelector(".cluster-findings");
+	assert.equal(findings.querySelector(".supplied-resource-context").textContent, "Supplied resource context: kind: Secret · name: <source-name>");
+	assert.equal(findings.querySelector("code").textContent, "external: rule");
+	assert.match(findings.querySelector(".findings-explanation").textContent, /no additional resource matches/);
+	const ai = env.app.querySelector(".ai-card");
+	assert.equal(ai.querySelector("small").textContent, "provider · model");
+	assert.equal(ai.querySelector("p").textContent, "AI <summary>");
+	assert.match(ai.querySelectorAll("small")[1].textContent, /input was truncated/);
+	assert.equal(findings.querySelectorAll(".ai-card").length, 0);
+	env.navigate("#resource/0");
+	assert.equal(env.app.querySelectorAll(".supplied-resource-context").length, 0);
+});

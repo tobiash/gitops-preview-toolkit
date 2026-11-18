@@ -166,7 +166,7 @@ func TestRenderHTMLReportEscapesScriptTerminators(t *testing.T) {
 	if strings.Contains(html, "</script><script>alert") {
 		t.Fatalf("script terminator was not escaped: %s", html)
 	}
-	if !strings.Contains(html, "gitops-preview-toolkit Report") {
+	if !strings.Contains(html, "GitOps Preview Report") {
 		t.Fatal("missing report title")
 	}
 }

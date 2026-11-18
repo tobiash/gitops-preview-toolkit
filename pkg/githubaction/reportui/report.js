@@ -4,6 +4,10 @@
 	);
 	const app = document.getElementById("app");
 	data.resources ||= [];
+	data.meta ||= {};
+	data.policies ||= {};
+	let lastReviewHash;
+	let exactCluster = null;
 	let reviewFilter = "all", grouping = "none", diffMode = "unified";
 	let reviewed = new Set(), storageOK = true, storageKey;
 	let preferences = {};
@@ -32,6 +36,7 @@
 		if (filters.query.trim()) params.set("query", filters.query.trim());
 		if (reviewFilter !== "all") params.set("review", reviewFilter);
 		if (grouping !== "none") params.set("group", grouping);
+		if (exactCluster !== null) params.set("exactCluster", exactCluster);
 		return `#${index === undefined ? "resources" : "resource/" + index}${params.size ? "?" + params : ""}`;
 	}
 	function markReviewed(res) {
@@ -120,8 +125,10 @@
 			reviewFilter = r.params.get("review") === "unreviewed" ? "unreviewed" : "all";
 			grouping = ["cluster", "producer", "kind"].includes(r.params.get("group")) ? r.params.get("group") : "none";
 			diffMode = r.params.get("view") === "split" ? "split" : "unified";
+			exactCluster = r.params.get("exactCluster");
+			lastReviewHash = scopedHash(r.name === "resource" ? r.index : undefined);
 		}
-		setActiveNav(r.name === "resource" ? "resources" : r.name);
+		setActiveNav(["resource", "resources"].includes(r.name) ? "resources" : "overview");
 		focusedIndex = -1;
 		app.replaceChildren();
 		app.classList.toggle("workspace-app", r.name === "resource" || r.name === "resources");
@@ -140,7 +147,8 @@
 		(document.getElementById(pendingFocus || focusID) || (r.name === "resource" && app.querySelector(".workspace-detail")) || app).focus({ preventScroll: true });
 		pendingFocus = undefined;
 		const nav = document.querySelector('[data-route="resources"]');
-		if (nav) nav.setAttribute("href", scopedHash());
+		if (nav) nav.setAttribute("href", lastReviewHash || scopedHash());
+		if (r.name === "cluster-findings" || r.name.startsWith("evidence-")) document.getElementById(r.name)?.scrollIntoView?.();
 	}
 
 	function renderWorkspace(r) {
@@ -157,17 +165,16 @@
 	}
 
 	function renderOverview() {
-		app.append(
-			el("div", { class: "eyebrow", text: "Impact Summary" }),
-			el("h1", { text: titleForStatus() }),
-			el("div", { class: "meta" }, [
-				el("span", { text: `Base: ${data.meta.base || "unknown"}` }),
-				el("span", { text: `Target: ${data.meta.target || "unknown"}` }),
-				el("span", { text: `Generated: ${data.meta.generatedAt}` }),
-			]),
-			summaryGrid(),
-		);
-		app.append(actionLinks());
+		app.append(el("div", { class: "overview-intro" }, [
+			el("div", {}, [el("h1", { text: titleForStatus() }), el("p", { text: "Actual resource changes and available manifest evidence. Review marks are local notes, not approval." }), el("a", { href: "#cluster-findings", class: "findings-jump", text: "Jump to cluster-wide findings" })]),
+			data.resources.length ? el("a", { class: "button", href: "#resources", text: "Review all changes" }) : el("button", { class: "button", disabled: "", text: "No resource changes to review" }),
+		]));
+		app.append(summaryGrid());
+		if (inlineOverviewEvidence()) {
+			const index = el("div", { class: "small-index" });
+			for (const res of data.resources) index.append(el("a", { class: "small-index-row", href: `#evidence-${res.index}` }, [el("strong", { text: `${res.kind} / ${resourceName(res)}` }), el("span", { text: `${res.cluster || "default"} · ${res.action} · evidence below` })]));
+			app.append(index);
+		}
 		app.append(el("section", { class: "review-brief" }, [
 			el("div", {}, [el("strong", { text: "Report status" }), el("p", { text: `${data.meta.status || "unknown"}${data.meta.warnings?.length ? ` · ${data.meta.warnings.length} warning${data.meta.warnings.length === 1 ? "" : "s"}` : ""}${data.meta.diffTruncated ? " · report diff truncated" : ""}` })]),
 			el("div", {}, [el("strong", { text: "Deterministic policy" }), el("p", { text: data.policies.policyFailed ? "Failed" : "No failure reported · evaluation status unavailable" })]),
@@ -175,33 +182,42 @@
 		]));
 		renderWarningSection();
 		renderClusterSection();
-		renderSingleClusterPolicySignals();
-		renderAIAssessment();
-		renderKindSection();
+		const start = app.children.length;
 		renderChangesPreview();
+		const inventory = el("section", { class: "change-inventory", "aria-label": "Changed resources" });
+		while (app.children.length > start) inventory.append(app.children[start]);
+		app.append(el("div", { class: "overview-columns" }, [inventory, clusterFindings()]));
+		renderAIAssessment();
 	}
 
 	function titleForStatus() {
 		const clusters = new Set(data.resources.map(r => r.cluster || "default")).size;
-		return `${data.summary.total} resource changes across ${clusters} cluster${clusters === 1 ? "" : "s"}`;
+		if (data.meta.status === "error") return `Report could not complete · ${data.resources.length} resource changes available`;
+		return `${data.resources.length} resource changes across ${clusters} cluster${clusters === 1 ? "" : "s"}`;
+	}
+
+	function counts(resources) {
+		return { added: resources.filter(r => r.action === "added").length, modified: resources.filter(r => r.action === "modified").length, deleted: resources.filter(r => r.action === "deleted").length, total: resources.length };
+	}
+
+	function inlineOverviewEvidence() {
+		// Small inventory is not necessarily a small diff. Never slice evidence
+		// to fit Overview: larger manifests use the individual review workspace.
+		return data.resources.length > 0 && data.resources.length <= 2 && data.resources.reduce((total, res) => total + (res.diffRows?.length || 0), 0) <= 80;
+	}
+
+	function distribution(row) {
+		const bar = el("div", { class: "change-distribution", role: "img", "aria-label": `${row.added} added, ${row.modified} modified, ${row.deleted} deleted; ${row.total} changes` });
+		for (const action of ["added", "modified", "deleted"]) bar.append(el("span", { class: action, style: `flex-grow:${row[action]}` }));
+		return bar;
 	}
 
 	function summaryGrid() {
-		return el("section", { class: "summary-grid" }, [
-			metric("added", `+${data.summary.added}`, "New resources", "added"),
-			metric(
-				"modified",
-				`~${data.summary.modified}`,
-				"Modified resources",
-				"modified",
-			),
-			metric(
-				"deleted",
-				`-${data.summary.deleted}`,
-				"Deleted resources",
-				"deleted",
-			),
-			metric("", `${data.summary.total}`, "Total changes", ""),
+		const row = counts(data.resources);
+		return el("section", { class: "overview-change-band", "aria-label": "Resource action totals" }, [
+			metric("added", `+${row.added}`, "Added", "added"),
+			metric("modified", `~${row.modified}`, "Modified", "modified"),
+			metric("deleted", `−${row.deleted}`, "Deleted", "deleted"), distribution(row),
 		]);
 	}
 
@@ -211,7 +227,7 @@
 				? `#resources${action ? "?query=" + encodeURIComponent("action:" + action) : ""}`
 				: null;
 		if (href)
-			return el("a", { href, class: `metric ${kind}` }, [
+			return el("a", { href, class: `metric ${kind}${/^[+~−-]?0$/.test(value) ? " zero" : ""}` }, [
 				el("span", { class: "metric-value", text: value }),
 				el("span", { class: "metric-label", text: label }),
 			]);
@@ -221,53 +237,50 @@
 		]);
 	}
 
-	function actionLinks() {
-		const children = [
-			el("a", {
-				class: "button",
-				href: "#resources",
-				text: "Open Resource Browser",
-			}),
-			el("a", {
-				class: "button secondary",
-				href: "#overview",
-				text: `${data.resources.length} resources indexed`,
-			}),
-		];
-		const labels = suggestedLabelPills();
-		if (labels) children.push(labels);
-		return el("div", { class: "overview-actions" }, children);
-	}
-
 	function renderClusterSection() {
-		const rows = Object.entries(data.summary.clusterBreakdown || {}).sort(
+		const groups = new Map();
+		for (const res of data.resources) {
+			const cluster = res.cluster || "default";
+			if (!groups.has(cluster)) groups.set(cluster, []);
+			groups.get(cluster).push(res);
+		}
+		const rows = [...groups].map(([cluster, resources]) => [cluster, counts(resources)]).sort(
 			(a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]),
 		);
 		if (rows.length === 0) return;
-		// Only show cluster breakdown in multi-cluster mode.
-		if (rows.length <= 1) return;
-		app.append(el("h2", { text: "Clusters" }));
-		const grid = el("div", { class: "cluster-grid" });
-		const policyGroups = groupPolicySignalsByCluster(policySignals());
+		const grid = el("section", { class: "cluster-summary", "aria-label": "Clusters" }, [el("h2", { text: "Clusters" })]);
 		for (const [cluster, row] of rows) {
 			const clusterLabel = cluster || "(default)";
-			const href = `#resources?query=${encodeURIComponent("cluster:" + (cluster || "default"))}`;
-			const children = [
-				el("div", { class: "card-title" }, [
-					el("strong", { text: clusterLabel }),
-					el("span", { class: "pill", text: String(row.total) }),
-				]),
-				el("small", {
-					text: `${row.added} added · ${row.modified} modified · ${row.deleted} deleted`,
-				}),
-			];
-			const signals = uniquePolicySignals(
-				policyGroups.get(cluster || "default") || [],
-			);
-			if (signals.length > 0) children.push(policyPills(signals, 3));
-			grid.append(el("a", { class: "card cluster-card", href }, children));
+			const href = `#resources?exactCluster=${encodeURIComponent(cluster || "default")}`;
+			grid.append(el("div", { class: "cluster-summary-row" }, [
+				el("strong", { text: clusterLabel }),
+				el("div", { class: "cluster-action-summary" }, [el("span", { class: "cluster-total", text: `${row.total} changes` }), ...["added", "modified", "deleted"].map(action => el("span", { class: `change-count ${action}${row[action] ? "" : " zero"}`, text: `${row[action]} ${action}` })), distribution(row)]),
+				el("a", { class: "cluster-browse", href, text: `Open ${clusterLabel} inventory` }),
+			]));
 		}
 		app.append(grid);
+	}
+
+	function clusterFindings() {
+		const signals = policySignals();
+		const section = el("section", { id: "cluster-findings", class: "cluster-findings", tabindex: "-1" }, [
+			el("h2", { text: "Cluster-wide findings" }),
+			el("p", { class: "findings-explanation", text: signals.some(s => s.resourceContext) ? "These policy findings are presented at whole-cluster scope, separate from individual resource review. Any supplied resource context is shown explicitly; no additional resource matches are inferred." : "These policy findings apply to the whole named cluster, not an individual resource. No resource-level attribution is supplied." }),
+			el("p", { class: "scope-note", text: "Opening a cluster shows its complete change inventory, not resources claimed to have triggered a finding." }),
+		]);
+		const groups = groupPolicySignalsByCluster(signals);
+		if (!groups.size) section.append(el("p", { class: "scope-note", text: "No cluster-wide findings supplied. This does not establish successful policy evaluation or approval." }));
+		for (const [cluster, signals] of groups) {
+			const group = el("section", { class: "cluster-finding-group" }, [el("div", { class: "cluster-finding-heading" }, [el("h3", { text: cluster }), el("span", { text: "Whole cluster" })])]);
+			for (const signal of sortedPolicySignals(signals)) group.append(el("div", { class: "cluster-finding-row", "data-severity": signal.severity }, [el("span", { class: "finding-severity", text: signal.severity }), el("code", { text: signal.text }), ...(signal.message ? [el("small", { text: signal.message })] : []), ...(signal.resourceContext ? [el("small", { class: "supplied-resource-context", text: `Supplied resource context: ${signal.resourceContext}` })] : [])]));
+			group.append(el("a", { class: "cluster-browse", href: `#resources?exactCluster=${encodeURIComponent(cluster)}`, text: `Browse ${cluster} changes` }));
+			section.append(group);
+		}
+		const labels = suggestedLabelPills();
+		if (data.policies.policyFailures?.length) section.append(el("h3", { text: "Reported policy failure reasons" }), ...data.policies.policyFailures.map(text => el("p", { class: "scope-note", text })));
+		if (labels) section.append(el("h3", { text: "Suggested report labels" }), labels);
+		section.append(el("p", { class: "findings-provenance", text: "Source: deterministic policy output. Provenance is shown as supplied; unattributed findings have no supplied provenance. Policy outcome is separate; severity is not a failure verdict." }));
+		return section;
 	}
 
 	function renderWarningSection() {
@@ -289,14 +302,6 @@
 		app.append(list);
 	}
 
-	function renderSingleClusterPolicySignals() {
-		const rows = Object.entries(data.summary.clusterBreakdown || {});
-		if (rows.length > 1) return;
-		const signals = uniquePolicySignals(policySignals());
-		if (signals.length === 0) return;
-		app.append(policyPills(signals));
-	}
-
 	function renderAIAssessment() {
 		if (!data.ai) return;
 		app.append(el("h2", { text: "AI Assessment" }));
@@ -312,29 +317,6 @@
 		if (data.ai.truncated)
 			children.push(el("small", { text: "AI input was truncated; assessment may not cover every diff detail." }));
 		app.append(el("section", { class: "card ai-card" }, children));
-	}
-
-	function renderKindSection() {
-		const rows = Object.entries(data.summary.kindBreakdown || {}).sort(
-			(a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]),
-		);
-		if (rows.length === 0) return;
-		app.append(el("h2", { text: "Resource kinds" }));
-		const grid = el("div", { class: "kind-grid" });
-		for (const [kind, row] of rows) {
-			grid.append(
-				el("div", { class: "card" }, [
-					el("div", { class: "card-title" }, [
-						el("strong", { text: kind }),
-						el("span", { class: "pill", text: String(row.total) }),
-					]),
-					el("small", {
-						text: `${row.added} added · ${row.modified} modified · ${row.deleted} deleted`,
-					}),
-				]),
-			);
-		}
-		app.append(grid);
 	}
 
 	function suggestedLabelPills() {
@@ -354,6 +336,8 @@
 				priority: item.priority || item.Priority || 0,
 				severity: item.severity || item.Severity || "info",
 				text: `${item.provenance || item.Provenance || "unattributed"}: ${item.id || item.ID || "classification"}`,
+				message: item.message || item.Message,
+				resourceContext: suppliedResourceContext(item),
 			});
 		}
 		for (const item of data.policies.violations || []) {
@@ -362,9 +346,18 @@
 				priority: item.priority || item.Priority || 0,
 				severity: item.severity || item.Severity || "error",
 				text: item.id || item.ID || item.message || "violation",
+				message: (item.id || item.ID) && (item.message || item.Message),
+				resourceContext: suppliedResourceContext(item),
 			});
 		}
 		return signals;
+	}
+
+	function suppliedResourceContext(item) {
+		return ["kind", "namespace", "name", "logicalId"].flatMap(key => {
+			const value = item[key] || item[key === "logicalId" ? "LogicalID" : key[0].toUpperCase() + key.slice(1)];
+			return value ? [`${key}: ${value}`] : [];
+		}).join(" · ");
 	}
 
 	function groupPolicySignalsByCluster(signals) {
@@ -375,18 +368,6 @@
 			groups.get(cluster).push(signal);
 		}
 		return groups;
-	}
-
-	function uniquePolicySignals(signals) {
-		const seen = new Set();
-		const out = [];
-		for (const signal of sortedPolicySignals(signals)) {
-			const key = `${signal.severity}\x00${signal.text}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			out.push(signal);
-		}
-		return out;
 	}
 
 	function sortedPolicySignals(signals) {
@@ -450,11 +431,12 @@
 			}));
 		}
 		const list = el("div", { class: "resource-list" });
+		if (truncated) app.append(el("p", { class: "scope-note", text: `${data.resources.length - preview.length} more changes in the complete inventory. Preview uses source order, not impact ranking.` }));
 		for (const res of preview)
-			list.append(resourceCard(res));
+			list.append(el("article", { class: "inventory-item", id: `evidence-${res.index}` }, [resourceCard(res), ...(inlineOverviewEvidence() ? [el("p", { class: "scope-note", text: "Available manifest evidence" }), diffView(res, "unified")] : [])]));
 		if (data.resources.length === 0)
 			list.append(
-				el("div", { class: "empty-state", text: "No changed resources." }),
+				el("div", { class: "empty-state", text: data.meta.status === "error" ? "No resource evidence supplied. The report could not complete; this does not establish that there are no changes." : "No changed resources supplied." }),
 			);
 		app.append(list);
 		if (truncated) {
@@ -493,7 +475,7 @@
 			);
 		const count = app.querySelector(".filter-count");
 		if (count)
-			count.textContent = `${rows.length} of ${data.resources.length} resources`;
+			count.textContent = `${rows.length} of ${data.resources.length} resources${exactCluster !== null ? ` · cluster: ${exactCluster}` : ""}`;
 		const clear = app.querySelector(".clear-filters");
 		if (clear) clear.hidden = !hasActiveFilters();
 		focusedIndex = -1;
@@ -554,7 +536,7 @@
 			clear,
 			el("span", {
 				class: "filter-count",
-				text: `${filteredResources().length} of ${data.resources.length} resources`,
+				text: `${filteredResources().length} of ${data.resources.length} resources${exactCluster !== null ? ` · cluster: ${exactCluster}` : ""}`,
 			}),
 		);
 		const review = el("select", { id: "review-filter", "aria-label": "Review filter" });
@@ -570,11 +552,12 @@
 	}
 
 	function hasActiveFilters() {
-		return filters.query.trim() !== "" || reviewFilter !== "all";
+		return filters.query.trim() !== "" || reviewFilter !== "all" || exactCluster !== null;
 	}
 
 	function clearFilters() {
 		filters.query = "";
+		exactCluster = null;
 		reviewFilter = "all";
 		syncResourceFiltersToHash();
 	}
@@ -582,12 +565,13 @@
 	function syncResourceFiltersToHash() {
 		const r = route();
 		const next = scopedHash(r.name === "resource" ? r.index : undefined);
+		lastReviewHash = next;
 		if (location.hash !== next) history.replaceState(null, "", next);
 		for (const link of app.querySelectorAll(".back-to-list")) link.setAttribute("href", scopedHash());
 		const breadcrumb = app.querySelector(".breadcrumb")?.querySelector("a");
 		if (breadcrumb) breadcrumb.setAttribute("href", scopedHash());
 		const nav = document.querySelector('[data-route="resources"]');
-		if (nav) nav.setAttribute("href", scopedHash());
+		if (nav) nav.setAttribute("href", lastReviewHash || scopedHash());
 	}
 
 	function resourceQueryFromParams(params) {
@@ -755,6 +739,7 @@
 	function filteredResources() {
 		const parsed = parseResourceQuery(filters.query);
 		return data.resources.filter((r) => {
+			if (exactCluster !== null && (r.cluster || "default") !== exactCluster) return false;
 			if (reviewFilter === "unreviewed" && reviewed.has(reviewID(r))) return false;
 			const haystack =
 				`${resourceName(r)} ${r.logicalId || ""} ${r.namespace || "cluster-scoped"} ${r.kind} ${r.cluster || "default"} ${r.producer || ""} ${r.action} ${r.apiVersion || ""}`.toLowerCase();
@@ -860,7 +845,7 @@
 	function resourceCard(res) {
 		return el(
 			"a",
-			{ class: `resource-card${route().index === res.index ? " selected" : ""}`, href: scopedHash(res.index), tabindex: "0", "aria-current": route().index === res.index ? "true" : "false" },
+			{ class: `resource-card ${res.action}${route().index === res.index ? " selected" : ""}`, href: scopedHash(res.index), tabindex: "0", "aria-current": route().index === res.index ? "true" : "false" },
 			[
 				el("div", { class: "resource-title" }, [
 					el("strong", {
@@ -993,6 +978,7 @@
 			]),
 			diffStats(res),
 			el("section", { class: "detail-panel" }, [diffView(res, view)]),
+			el("p", { class: "resource-policy-note", text: "Cluster-wide policy findings are in Overview, not attributed to this resource." }),
 		);
 	}
 
@@ -1031,7 +1017,7 @@
 	}
 
 	function diffView(res, view) {
-		const wrap = el("div", { class: `diff ${view}` });
+		const wrap = el("div", { class: `diff ${view}`, tabindex: "0", "aria-label": `${view} manifest diff` });
 		if (!res.diffRows.length && !res.truncated) wrap.append(el("p", { class: "empty-state", text: "No diff lines available for this resource." }));
 		for (const row of res.diffRows)
 			wrap.append(view === "split" ? splitRow(row) : unifiedRow(row));
@@ -1134,7 +1120,20 @@
 		if (!dialog.open) dialog.showModal();
 	}
 	const theme = document.getElementById("theme-select");
-	function applyTheme() { document.documentElement.setAttribute("data-theme", ["light", "dark"].includes(preferences.theme) ? preferences.theme : "system"); }
+	for (const key of ["base", "target"]) for (const suffix of ["-ref", "-ref-full"]) {
+		const node = document.getElementById(key + suffix);
+		if (node) node.textContent = data.meta[key] || "unknown";
+	}
+	const facts = document.getElementById("report-facts");
+	if (facts) facts.append(...[
+		`Source diff ${data.meta.diffTruncated ? "truncated" : "not marked truncated"}`,
+		`Policy: ${data.policies.policyFailed ? "Failed" : "No failure reported · evaluation status unavailable"}`,
+		`AI Assessment: ${data.ai ? "Provided separately in Overview" : "Not provided"}`,
+		`Generated: ${data.meta.generatedAt || "unknown"}`,
+	].map(text => el("span", { text })));
+	const systemTheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+	function applyTheme() { document.documentElement.setAttribute("data-theme", ["light", "dark"].includes(preferences.theme) ? preferences.theme : systemTheme?.matches ? "dark" : "light"); }
+	systemTheme?.addEventListener("change", () => { if (!["light", "dark"].includes(preferences.theme)) applyTheme(); });
 	if (theme) {
 		theme.value = preferences.theme || "system";
 		theme.addEventListener("change", () => { preferences.theme = theme.value; applyTheme(); savePreferences(); });

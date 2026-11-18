@@ -4,22 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Interactive gitops-preview-toolkit diff report with resource filters and per-resource manifest changes.">
-  <title>gitops-preview-toolkit Report</title>
+   <title>GitOps Preview Report</title>
   <style>{{ .CSS }}</style>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="https://github.com/tobiash/gitops-preview-toolkit" target="_blank" rel="noopener">gitops-preview-toolkit</a>
-    <nav aria-label="Report navigation">
-      <a href="#overview" data-route="overview">Overview</a>
-      <a href="#resources" data-route="resources">Resources</a>
-    </nav>
+  <header class="tool-header">
+    <div class="masthead">
+    <a class="brand" href="#overview">GitOps Preview</a>
+    <details class="comparison"><summary title="Expand to read full base and target refs"><span class="ref-part"><span class="ref-label">Base</span><span class="ref-value" id="base-ref"></span></span><span class="ref-direction" aria-hidden="true">→</span><span class="ref-part"><span class="ref-label">Target</span><span class="ref-value" id="target-ref"></span></span><span aria-hidden="true">⌄</span></summary><dl class="full-refs"><div><dt>Base</dt><dd id="base-ref-full"></dd></div><div><dt>Target</dt><dd id="target-ref-full"></dd></div></dl></details>
     <div class="presentation-controls">
       <label class="sr-only" for="theme-select">Color theme</label>
       <select id="theme-select"><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select>
       <button id="help-button" type="button" aria-label="Keyboard shortcut help">? Help</button>
     </div>
+    </div>
+    <nav class="mode-bar" aria-label="Report navigation">
+      <a href="#overview" data-route="overview">Overview</a>
+      <a href="#resources" data-route="resources">Review</a>
+    </nav>
   </header>
+  <section id="report-facts" class="report-facts" aria-label="Report facts"></section>
   <div id="review-announcement" class="sr-only" role="status" aria-live="polite"></div>
   <dialog id="keyboard-help" aria-labelledby="help-title">
     <h2 id="help-title">Keyboard shortcuts</h2>
